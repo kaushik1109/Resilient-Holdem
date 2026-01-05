@@ -1,0 +1,130 @@
+package networking;
+
+import java.io.*;
+import java.net.*;
+import java.util.Enumeration;
+
+public class DiscoveryService {
+    private static final String MULTICAST_GROUP = "239.255.1.1";
+    private static final int MULTICAST_PORT = 8888;
+    
+    private boolean running = true;
+    private int myTcpPort;
+    private ConnectionManager connectionManager;
+
+    public DiscoveryService(int tcpPort, ConnectionManager manager) {
+        this.myTcpPort = tcpPort;
+        this.connectionManager = manager;
+    }
+
+    public void start() {
+        // 1. Start listening for others
+        new Thread(this::listenForBroadcasts).start();
+        
+        // 2. Shout "I am here" exactly ONCE. Later this should be on a loop but that would have to be reconciled
+        // with game logic
+        try {
+            Thread.sleep(500); // Wait briefly for listener to spin up
+            broadcastJoinRequest();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void listenForBroadcasts() {
+        try (MulticastSocket socket = new MulticastSocket(MULTICAST_PORT)) {
+            InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
+            InetSocketAddress groupAddress = new InetSocketAddress(group, MULTICAST_PORT);
+            
+            // Find a valid network interface (WiFi/Ethernet)
+            NetworkInterface netIf = findValidNetworkInterface();
+            socket.joinGroup(groupAddress, netIf); // Modern join
+
+            System.out.println("[UDP] Listening on " + MULTICAST_GROUP + " via " + netIf.getName());
+
+            byte[] buffer = new byte[1024];
+            while (running) {
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                socket.receive(packet);
+
+                ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
+                GameMessage msg = (GameMessage) ois.readObject();
+
+                // Ignore our own broadcast
+                if (msg.tcpPort == myTcpPort) continue;
+
+                System.out.println("[UDP] Found peer: " + msg.senderAddress + ":" + msg.tcpPort);
+                
+                // Connect immediately (No port checks, just connect)
+                connectionManager.connectToPeer(msg.senderAddress, msg.tcpPort);
+            }
+            
+            socket.leaveGroup(groupAddress, netIf);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void broadcastJoinRequest() {
+        try (MulticastSocket socket = new MulticastSocket()) {
+            InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
+            GameMessage msg = new GameMessage(
+                GameMessage.Type.JOIN_REQUEST, 
+                getPrivateIp(), 
+                myTcpPort, 
+                "Hello"
+            );
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(baos);
+            oos.writeObject(msg);
+            byte[] data = baos.toByteArray();
+
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, MULTICAST_PORT);
+            socket.send(packet);
+            System.out.println("[UDP] Broadcasted JOIN_REQUEST.");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // TODO: understand this better before evaluation; has some mac specific stuff
+    private NetworkInterface findValidNetworkInterface() throws SocketException {
+        Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
+        for (NetworkInterface netIf : java.util.Collections.list(nets)) {
+            // 1. Must be Up
+            if (!netIf.isUp()) continue;
+            
+            // 2. Must support Multicast
+            if (!netIf.supportsMulticast()) continue;
+            
+            // 3. Ignore Loopback (127.0.0.1) unless you are offline
+            if (netIf.isLoopback()) continue;
+
+            // 4. MAC SPECIFIC: Ignore "utun" (VPN) and "awdl" (AirDrop) interfaces
+            // These often cause the "Can't assign requested address" error
+            String name = netIf.getName();
+            if (name.startsWith("utun") || name.startsWith("awdl") || name.startsWith("llw")) {
+                continue;
+            }
+
+            // 5. Must have an IPv4 address
+            boolean hasIpv4 = netIf.getInterfaceAddresses().stream()
+                .anyMatch(addr -> addr.getAddress() instanceof Inet4Address);
+                
+            if (hasIpv4) {
+                System.out.println("[UDP] Binding to interface: " + netIf.getName() + " (" + netIf.getDisplayName() + ")");
+                return netIf;
+            }
+        }
+        
+        // Fallback: If no real interface found, use loopback (local testing only)
+        System.out.println("[UDP] No valid WiFi/Ethernet found. Falling back to Loopback.");
+        return NetworkInterface.getByName("lo0"); // 'lo0' is standard loopback on Mac
+    }
+    
+    private String getPrivateIp() {
+        try { return InetAddress.getLocalHost().getHostAddress(); } 
+        catch (UnknownHostException e) { return "127.0.0.1"; }
+    }
+}
