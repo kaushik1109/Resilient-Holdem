@@ -1,17 +1,26 @@
 package networking;
 
+import consensus.ElectionManager;
 import java.io.*;
 import java.net.*;
+import java.util.Set;
 import java.util.concurrent.*;
 
 public class ConnectionManager {
     private int myPort;
     private ServerSocket serverSocket;
     private boolean running = true;
-    private ConcurrentHashMap<String, ObjectOutputStream> peers = new ConcurrentHashMap<>();
+    
+    private ConcurrentHashMap<Integer, Peer> peers = new ConcurrentHashMap<>();
+    
+    private ElectionManager electionManager;
 
     public ConnectionManager(int port) {
         this.myPort = port;
+    }
+
+    public void setElectionManager(ElectionManager em) {
+        this.electionManager = em;
     }
 
     public void start() {
@@ -24,52 +33,93 @@ public class ConnectionManager {
             System.out.println("[TCP] Server listening on port " + myPort);
             while (running) {
                 Socket clientSocket = serverSocket.accept();
-                handleNewConnection(clientSocket, true);
+                handleNewConnection(clientSocket);
             }
         } catch (IOException e) { e.printStackTrace(); }
     }
 
     public void connectToPeer(String ip, int port) {
-        String peerId = ip + ":" + port;
-        
-        // Only skip if we are ALREADY connected
-        if (peers.containsKey(peerId)) return;
-
-        // we can maybe add a port check to prevent double simultaneous connections but then the UDP broadcasts
-        // need to be repeated, which we can implement later, not now
+        System.out.println("[TCP] Connecting to Peer: " + ip + ":" + Integer.toString(port));
+        if (peers.containsKey(port)) return;
 
         try {
-            System.out.println("[TCP] Connecting to " + peerId);
             Socket socket = new Socket(ip, port);
-            handleNewConnection(socket, false);
+            handleNewConnection(socket);
         } catch (IOException e) {
-            System.err.println("[TCP] Failed to connect to " + peerId);
+            System.err.println("[TCP] Failed to connect to " + ip + ":" + port);
         }
     }
 
-    private void handleNewConnection(Socket socket, boolean isIncoming) {
+    private void handleNewConnection(Socket socket) {
         try {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-            
-            String peerId = socket.getInetAddress().getHostAddress() + ":" + socket.getPort();
-            peers.put(peerId, out);
-            
-            System.out.println("[TCP] Connected: " + peerId + (isIncoming ? " (Incoming)" : " (Outgoing)"));
-            
-            new Thread(() -> listenToPeer(in, peerId)).start();
+
+            // Tell the other side who WE are right now
+            GameMessage handshake = new GameMessage(
+                GameMessage.Type.HEARTBEAT, // Use HEARTBEAT or create a HANDSHAKE type
+                socket.getLocalAddress().getHostAddress(), 
+                myPort, 
+                "HANDSHAKE"
+            );
+            out.writeObject(handshake);
+            out.flush();
+
+            // Now start listening for their handshake
+            new Thread(() -> listenToPeer(in, socket, out)).start();
+
         } catch (IOException e) { e.printStackTrace(); }
     }
 
-    private void listenToPeer(ObjectInputStream in, String peerId) {
+    private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStream out) {
+        int peerId = -1;
         try {
             while (running) {
                 GameMessage msg = (GameMessage) in.readObject();
-                System.out.println("[TCP] Received " + msg.type + " from " + peerId);
+                
+                // Registration: If we don't know who this is yet, save them now
+                if (peerId == -1) {
+                    peerId = msg.tcpPort;
+                    peers.put(peerId, new Peer(socket.getInetAddress().getHostAddress(), peerId, socket, out));
+                    System.out.println("[TCP] Connection Established with Node ID: " + peerId);
+                    
+                    // If the first message was just a handshake, we can skip processing it further
+                    if ("HANDSHAKE".equals(msg.payload)) continue; 
+                }
+
+                // Forward normal messages to the ElectionManager
+                if (electionManager != null) {
+                    electionManager.handleMessage(msg);
+                }
             }
         } catch (Exception e) {
-            System.out.println("[TCP] Peer disconnected: " + peerId);
-            peers.remove(peerId);
+            System.out.println("[TCP] Node " + peerId + " disconnected.");
+            if (peerId != -1) peers.remove(peerId);
         }
+    }
+
+    public void broadcastToAll(GameMessage msg) {
+        for (Peer peer : peers.values()) {
+            try {
+                peer.out.writeObject(msg);
+                peer.out.flush();
+            } catch (IOException e) {
+                System.out.println("Failed to send to Node " + peer.peerId);
+            }
+        }
+    }
+    
+    public void sendToPeer(int targetPeerId, GameMessage msg) {
+        Peer peer = peers.get(targetPeerId);
+        if (peer != null) {
+            try {
+                peer.out.writeObject(msg);
+                peer.out.flush();
+            } catch (IOException e) { e.printStackTrace(); }
+        }
+    }
+
+    public Set<Integer> getConnectedPeerIds() {
+        return peers.keySet();
     }
 }

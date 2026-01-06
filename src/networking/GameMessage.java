@@ -8,7 +8,12 @@ public class GameMessage implements Serializable {
 
     public enum Type {
         JOIN_REQUEST,  
-        JOIN_ACCEPT,   
+        JOIN_ACCEPT,
+
+        ELECTION,       
+        ELECTION_OK,    
+        COORDINATOR, 
+           
         HEARTBEAT,     
         GAME_ACTION   
     }
