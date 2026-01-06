@@ -1,17 +1,17 @@
 package consensus;
 
-import networking.ConnectionManager;
+import networking.TcpMeshManager;
 import networking.GameMessage;
 
 public class ElectionManager {
     private int myId;
-    private ConnectionManager connectionManager;
+    private TcpMeshManager connectionManager;
     
     private volatile boolean electionInProgress = false;
-    private volatile boolean iAmLeader = false; // Made volatile for thread safety
+    public volatile boolean iAmLeader = false; // Made volatile for thread safety
     public int currentLeaderId = -1;
 
-    public ElectionManager(int myId, ConnectionManager connectionManager) {
+    public ElectionManager(int myId, TcpMeshManager connectionManager) {
         this.myId = myId;
         this.connectionManager = connectionManager;
     }
@@ -26,18 +26,16 @@ public class ElectionManager {
     }
 
     public synchronized void startElection(String reason) {
-        // FIX 1: If we are already the leader, ignore the "Startup" timer
         if (iAmLeader) {
             return;
         }
         
-        // FIX 2: If an election is already running, don't start another
         if (electionInProgress) {
             return;
         }
         
         electionInProgress = true;
-        iAmLeader = false; // We are not leader while fighting
+        iAmLeader = false; 
         System.out.println("[Election] Starting Election (" + reason + ")...");
 
         boolean sentChallenge = false;
@@ -60,7 +58,7 @@ public class ElectionManager {
         new Thread(() -> {
             try {
                 Thread.sleep(2000); 
-                if (!electionInProgress) return; // Was cancelled
+                if (!electionInProgress) return;
                 declareVictory();
             } catch (Exception e) {}
         }).start();
@@ -69,7 +67,6 @@ public class ElectionManager {
     private synchronized void declareVictory() {
         if (!electionInProgress) return;
 
-        // FIX 3: Simpler Log Message
         System.out.println("[Election] I am the leader");
         
         iAmLeader = true;
@@ -105,7 +102,6 @@ public class ElectionManager {
                 System.out.println("[Election] New Leader: " + msg.tcpPort);
                 break;
             
-            // FIX 4: Default case for Linter
             default:
                 break;
         }

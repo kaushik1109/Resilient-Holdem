@@ -1,12 +1,15 @@
 package networking;
 
 import consensus.ElectionManager;
+import consensus.HoldBackQueue;
+import consensus.Sequencer;
+
 import java.io.*;
 import java.net.*;
 import java.util.Set;
 import java.util.concurrent.*;
 
-public class ConnectionManager {
+public class TcpMeshManager {
     private int myPort;
     private ServerSocket serverSocket;
     private boolean running = true;
@@ -15,13 +18,23 @@ public class ConnectionManager {
     
     private ElectionManager electionManager;
 
-    public ConnectionManager(int port) {
+    private Sequencer sequencer;
+    
+    private HoldBackQueue holdBackQueue;
+
+    public TcpMeshManager(int port) {
         this.myPort = port;
+    }
+
+    public void setHoldBackQueue(HoldBackQueue q) {
+        this.holdBackQueue = q;
     }
 
     public void setElectionManager(ElectionManager em) {
         this.electionManager = em;
     }
+
+    public void setSequencer(Sequencer s) { this.sequencer = s; }
 
     public void start() {
         new Thread(this::startServer).start();
@@ -85,6 +98,27 @@ public class ConnectionManager {
                     
                     // If the first message was just a handshake, we can skip processing it further
                     if ("HANDSHAKE".equals(msg.payload)) continue; 
+                }
+
+                if (msg.type == GameMessage.Type.ACTION_REQUEST) {
+                    if (sequencer != null) {
+                        sequencer.multicastAction(msg);
+                    }
+                }
+                
+                if (msg.type == GameMessage.Type.NACK) {
+                    if (sequencer != null) {
+                        sequencer.handleNack(msg, peerId);
+                    }
+                }
+                
+                if (msg.type == GameMessage.Type.ORDERED_MULTICAST) {
+                    // THIS IS THE FIX:
+                    // We received a re-transmission via TCP. Treat it exactly like a UDP packet.
+                    if (holdBackQueue != null) {
+                        System.out.println("[TCP] Received Retransmission #" + msg.sequenceNumber);
+                        holdBackQueue.addMessage(msg);
+                    }
                 }
 
                 // Forward normal messages to the ElectionManager

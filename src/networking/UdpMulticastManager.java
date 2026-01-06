@@ -4,18 +4,25 @@ import java.io.*;
 import java.net.*;
 import java.util.Enumeration;
 
-public class DiscoveryService {
+import consensus.HoldBackQueue;
+
+public class UdpMulticastManager {
     private static final String MULTICAST_GROUP = "239.255.1.1";
     private static final int MULTICAST_PORT = 8888;
     
     private boolean running = true;
     private int myTcpPort;
-    private ConnectionManager connectionManager;
 
-    public DiscoveryService(int tcpPort, ConnectionManager manager) {
+    private TcpMeshManager connectionManager;
+    
+    private HoldBackQueue holdBackQueue;
+
+    public UdpMulticastManager(int tcpPort, TcpMeshManager manager) {
         this.myTcpPort = tcpPort;
         this.connectionManager = manager;
     }
+
+    public void setHoldBackQueue(HoldBackQueue q) { this.holdBackQueue = q; }
 
     public void start() {
         // 1. Start listening for others
@@ -42,7 +49,7 @@ public class DiscoveryService {
 
             System.out.println("[UDP] Listening on " + MULTICAST_GROUP + " via " + netIf.getName());
 
-            byte[] buffer = new byte[1024];
+            byte[] buffer = new byte[4096];
             while (running) {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 socket.receive(packet);
@@ -50,13 +57,25 @@ public class DiscoveryService {
                 ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
                 GameMessage msg = (GameMessage) ois.readObject();
 
-                // Ignore our own broadcast
                 if (msg.tcpPort == myTcpPort) continue;
-
-                System.out.println("[UDP] Found peer: " + msg.senderAddress + ":" + msg.tcpPort);
                 
-                // Connect immediately (No port checks, just connect)
-                connectionManager.connectToPeer(msg.senderAddress, msg.tcpPort);
+                switch (msg.type) {
+                    case JOIN_REQUEST:
+                        System.out.println("[UDP] Found peer: " + msg.senderAddress + ":" + msg.tcpPort);
+                        connectionManager.connectToPeer(msg.senderAddress, msg.tcpPort);
+                        break;
+
+                    case ORDERED_MULTICAST:
+                        // This is a game move (e.g., "Bet 20, Seq #5")
+                        // We must NOT process it yet. We give it to the queue.
+                        if (holdBackQueue != null) {
+                            holdBackQueue.addMessage(msg); 
+                        }
+                        break;
+                        
+                    default:
+                        break;
+                }
             }
             
             socket.leaveGroup(groupAddress, netIf);
@@ -122,7 +141,30 @@ public class DiscoveryService {
         System.out.println("[UDP] No valid WiFi/Ethernet found. Falling back to Loopback.");
         return NetworkInterface.getByName("lo0"); // 'lo0' is standard loopback on Mac
     }
-    
+
+    /**
+     * Generic helper to send ANY message to the multicast group.
+     * Used by the Sequencer to broadcast game actions.
+     */
+    public void sendMulticast(GameMessage msg) {
+        try (MulticastSocket socket = new MulticastSocket()) {
+            InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
+            
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(baos);
+            oos.writeObject(msg);
+            byte[] data = baos.toByteArray();
+
+            DatagramPacket packet = new DatagramPacket(data, data.length, group, MULTICAST_PORT);
+            socket.send(packet);
+            
+            System.out.println("[UDP] Sent Multicast: " + msg.type + " (Seq: " + msg.sequenceNumber + ")");
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private String getPrivateIp() {
         try { return InetAddress.getLocalHost().getHostAddress(); } 
         catch (UnknownHostException e) { return "127.0.0.1"; }

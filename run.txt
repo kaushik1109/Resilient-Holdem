@@ -1,2 +1,5 @@
 javac -d bin src/networking/*.java src/consensus/*.java src/Main.java
 java -cp bin Main
+
+javac -d bin src/networking/*.java src/consensus/*.java src/TestQueue.java
+java -cp bin TestQueue
