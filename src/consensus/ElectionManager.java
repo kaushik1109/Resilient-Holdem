@@ -106,4 +106,21 @@ public class ElectionManager {
                 break;
         }
     }
+    
+    /**
+     * Called by TCP Layer when a node crashes or times out.
+     */
+    public void handleNodeFailure(int deadNodeId) {
+        System.out.println("[Election] Detected failure of Node " + deadNodeId);
+        
+        if (deadNodeId == currentLeaderId) {
+            System.err.println(">>> THE LEADER HAS DIED! STARTING ELECTION! <<<");
+            
+            // Wait brief moment to ensure socket cleanup, then start
+            new Thread(() -> {
+                try { Thread.sleep(500); } catch(Exception e){}
+                startElection("Leader Crash");
+            }).start();
+        }
+    }
 }

@@ -10,6 +10,9 @@ import java.util.Set;
 import java.util.concurrent.*;
 
 public class TcpMeshManager {
+    private static final int HEARTBEAT_INTERVAL = 2000; // Send every 2s
+    private static final int TIMEOUT_THRESHOLD = 6000;  // Die after 6s silence
+
     private int myPort;
     private ServerSocket serverSocket;
     private boolean running = true;
@@ -38,6 +41,8 @@ public class TcpMeshManager {
 
     public void start() {
         new Thread(this::startServer).start();
+        new Thread(this::sendHeartbeats).start();
+        new Thread(this::monitorConnections).start();
     }
 
     private void startServer() {
@@ -49,6 +54,35 @@ public class TcpMeshManager {
                 handleNewConnection(clientSocket);
             }
         } catch (IOException e) { e.printStackTrace(); }
+    }
+    
+    private void sendHeartbeats() {
+        while (running) {
+            try {
+                Thread.sleep(HEARTBEAT_INTERVAL);
+                // Send a lightweight message to everyone
+                GameMessage hb = new GameMessage(
+                    GameMessage.Type.HEARTBEAT, "local", myPort, "Pulse"
+                );
+                broadcastToAll(hb); // Re-use your existing broadcast method
+            } catch (InterruptedException e) {}
+        }
+    }
+
+    private void monitorConnections() {
+        while (running) {
+            try {
+                Thread.sleep(1000);
+                long now = System.currentTimeMillis();
+
+                for (Peer peer : peers.values()) {
+                    if (now - peer.lastSeenTimestamp > TIMEOUT_THRESHOLD) {
+                        System.err.println("[Heartbeat] Peer " + peer.peerId + " timed out!");
+                        closeConnection(peer.peerId); // Kill the connection
+                    }
+                }
+            } catch (InterruptedException e) {}
+        }
     }
 
     public void connectToPeer(String ip, int port) {
@@ -84,51 +118,56 @@ public class TcpMeshManager {
         } catch (IOException e) { e.printStackTrace(); }
     }
 
-    private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStream out) {
+private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStream out) {
         int peerId = -1;
         try {
             while (running) {
                 GameMessage msg = (GameMessage) in.readObject();
                 
-                // Registration: If we don't know who this is yet, save them now
+                // 1. Registration (Same as before)
                 if (peerId == -1) {
                     peerId = msg.tcpPort;
                     peers.put(peerId, new Peer(socket.getInetAddress().getHostAddress(), peerId, socket, out));
-                    System.out.println("[TCP] Connection Established with Node ID: " + peerId);
-                    
-                    // If the first message was just a handshake, we can skip processing it further
-                    if ("HANDSHAKE".equals(msg.payload)) continue; 
                 }
 
-                if (msg.type == GameMessage.Type.ACTION_REQUEST) {
-                    if (sequencer != null) {
-                        sequencer.multicastAction(msg);
-                    }
-                }
-                
-                if (msg.type == GameMessage.Type.NACK) {
-                    if (sequencer != null) {
-                        sequencer.handleNack(msg, peerId);
-                    }
-                }
-                
-                if (msg.type == GameMessage.Type.ORDERED_MULTICAST) {
-                    // THIS IS THE FIX:
-                    // We received a re-transmission via TCP. Treat it exactly like a UDP packet.
-                    if (holdBackQueue != null) {
-                        System.out.println("[TCP] Received Retransmission #" + msg.sequenceNumber);
-                        holdBackQueue.addMessage(msg);
-                    }
-                }
+                // 2. Update Heartbeat Timestamp (Same as before)
+                Peer p = peers.get(peerId);
+                if (p != null) p.lastSeenTimestamp = System.currentTimeMillis();
 
-                // Forward normal messages to the ElectionManager
-                if (electionManager != null) {
-                    electionManager.handleMessage(msg);
+                // 3. Handle Message Types
+                switch (msg.type) {
+                    case HEARTBEAT:
+                        break; // Timestamp already updated above
+                        
+                    case LEAVE:
+                        System.out.println("[TCP] Peer " + peerId + " is shutting down gracefully.");
+                        // We close the connection explicitly.
+                        // This triggers 'handleNodeFailure' inside closeConnection()
+                        closeConnection(peerId);
+                        return; // Stop the thread
+                        
+                    case NACK:
+                        if (sequencer != null) sequencer.handleNack(msg, peerId);
+                        break;
+                        
+                    case ORDERED_MULTICAST:
+                        if (holdBackQueue != null) holdBackQueue.addMessage(msg);
+                        break;
+                        
+                    // Forward Election/Coordinator messages
+                    case ELECTION:
+                    case ELECTION_OK:
+                    case COORDINATOR:
+                        if (electionManager != null) electionManager.handleMessage(msg);
+                        break;
+                        
+                    default:
+                        break;
                 }
             }
         } catch (Exception e) {
-            System.out.println("[TCP] Node " + peerId + " disconnected.");
-            if (peerId != -1) peers.remove(peerId);
+            // This catches "Connection Reset" (Hard Crash)
+            closeConnection(peerId);
         }
     }
 
@@ -155,5 +194,18 @@ public class TcpMeshManager {
 
     public Set<Integer> getConnectedPeerIds() {
         return peers.keySet();
+    }
+
+    private synchronized void closeConnection(int peerId) {
+        if (peerId == -1 || !peers.containsKey(peerId)) return;
+        
+        System.out.println("[TCP] Closing connection to Node " + peerId);
+        Peer p = peers.remove(peerId);
+        try { p.socket.close(); } catch (Exception e) {}
+
+        // CRITICAL: Notify ElectionManager if a node dies!
+        if (electionManager != null) {
+            electionManager.handleNodeFailure(peerId);
+        }
     }
 }

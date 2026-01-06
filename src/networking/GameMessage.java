@@ -9,6 +9,8 @@ public class GameMessage implements Serializable {
         JOIN_REQUEST, JOIN_ACCEPT,
         HEARTBEAT,
         ELECTION, ELECTION_OK, COORDINATOR,
+
+        LEAVE,
         
         ACTION_REQUEST,     // "Leader, please broadcast 'Bet 20' for me"
         ORDERED_MULTICAST,   // "Here is 'Bet 20', Sequence #5"

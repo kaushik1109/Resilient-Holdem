@@ -55,6 +55,7 @@ public class Sequencer {
         
         System.out.println("[Sequencer] Broadcasting Action #" + seqId + ": " + originalRequest.payload);
         
+        
         // 3.5 Send to self first 
         if (localQueue != null) {
             localQueue.addMessage(orderedMsg);
@@ -73,7 +74,7 @@ public class Sequencer {
                 
                 System.out.println("[Sequencer] TCP Repair: Resending #" + missingSeq + " to Node " + requestorId);
                 
-                // USE TCP UNICAST instead of UDP Multicast
+                // USE TCP UNICAST instead of UDP Multicast for a retransmission
                 tcpLayer.sendToPeer(requestorId, oldMsg);
                 
             } else {

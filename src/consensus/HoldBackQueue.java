@@ -36,11 +36,8 @@ public class HoldBackQueue {
                 queue.poll(); // Duplicate, ignore
             } 
             else {
-                // GAP DETECTED!
-                // Head is #5, we expect #4. 
-                // We should ask for #4.
                 sendNack(nextExpectedSeq);
-                break; // Stop processing
+                break; 
             }
         }
     }
