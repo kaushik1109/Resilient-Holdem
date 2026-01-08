@@ -10,13 +10,21 @@ public class GameMessage implements Serializable {
         HEARTBEAT,
         ELECTION, ELECTION_OK, COORDINATOR,
 
-        LEAVE,
+        LEAVE, //TODO: not actually sent
         
         ACTION_REQUEST,     // "Leader, please broadcast 'Bet 20' for me"
         ORDERED_MULTICAST,   // "Here is 'Bet 20', Sequence #5"
 
         NACK,          // "I missed a packet!"
-        RETRANSMIT     // "Here is the packet you missed."
+        RETRANSMIT,     // "Here is the packet you missed."
+        
+        // SERVER -> CLIENT
+
+        YOUR_HAND,         // "Psst, here are your two hole cards" (TCP)
+        COMMUNITY_CARDS,   // "Here is the Flop/Turn/River" (UDP)
+        PLAYER_ACTION,     // "Player 5001 bet 20" (UDP)
+        GAME_STATE,        // "Pot is now 500, Current Player is 5002" (UDP)
+        SHOWDOWN           // "Game over, here are all hands" (UDP)
     }
 
     public Type type;

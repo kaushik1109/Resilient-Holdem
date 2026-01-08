@@ -3,6 +3,9 @@ package consensus;
 import networking.GameMessage;
 import networking.TcpMeshManager; 
 import java.util.PriorityQueue;
+
+import game.ClientGameState;
+
 import java.util.Comparator;
 
 public class HoldBackQueue {
@@ -11,8 +14,14 @@ public class HoldBackQueue {
     );
     
     private long nextExpectedSeq = 1;
-    private TcpMeshManager tcpLayer; // Reference to send NACKs
-    private int leaderId = -1;       // Who do we complain to?
+    private TcpMeshManager tcpLayer;
+    private int leaderId = -1;
+
+    private ClientGameState clientGame;
+
+    public void setClientGame(ClientGameState game) {
+        this.clientGame = game;
+    }
 
     public void setTcpLayer(TcpMeshManager tcp) { this.tcpLayer = tcp; }
     public void setLeaderId(int id) { this.leaderId = id; }
@@ -56,6 +65,26 @@ public class HoldBackQueue {
     }
 
     private void deliverToApp(GameMessage msg) {
-        System.out.println(">>> GAME ENGINE: Processing " + msg.payload + " (Seq: " + msg.sequenceNumber + ")");
+        System.out.println(">>> SEQ #" + msg.sequenceNumber + ": " + msg.type);
+        
+        if (clientGame == null) return;
+
+        switch (msg.type) {
+            case COMMUNITY_CARDS:
+                clientGame.onReceiveCommunity(msg.payload);
+                break;
+            case GAME_STATE:
+                clientGame.onReceiveState(msg.payload);
+                break;    
+            case PLAYER_ACTION: 
+            case ORDERED_MULTICAST: 
+                System.out.println("[Game] " + msg.payload);
+                break;
+            case SHOWDOWN:
+                System.out.println(">>> SHOWDOWN: " + msg.payload);
+                break;
+            default:
+                break;
+        }
     }
 }

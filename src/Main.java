@@ -4,85 +4,146 @@ import networking.GameMessage;
 import consensus.ElectionManager;
 import consensus.Sequencer;
 import consensus.HoldBackQueue;
+import game.TexasHoldem;
+import game.ClientGameState;
+
+import java.util.Scanner;
 import java.util.Random;
 
 public class Main {
+    // The "Server" Logic (Only non-null if I am Leader)
+    private static TexasHoldem serverGame;
+
     public static void main(String[] args) {
-        int myTcpPort = 5000 + new Random().nextInt(1000);
-        System.out.println("--- Resilient Hold'em Node Started (ID: " + myTcpPort + ") ---");
+        // 1. Identity
+        int myPort = 5000 + new Random().nextInt(1000);
+        System.out.println("--- Node Started (ID: " + myPort + ") ---");
 
-        // 1. Initialize Layers
-        TcpMeshManager tcpLayer = new TcpMeshManager(myTcpPort);
-        UdpMulticastManager udpLayer = new UdpMulticastManager(myTcpPort, tcpLayer);
-
-        // 2. Initialize Consensus
-        ElectionManager election = new ElectionManager(myTcpPort, tcpLayer);
+        // 2. Create Layers
+        TcpMeshManager tcpLayer = new TcpMeshManager(myPort);
+        UdpMulticastManager udpLayer = new UdpMulticastManager(myPort, tcpLayer);
+        
+        ElectionManager election = new ElectionManager(myPort, tcpLayer);
         Sequencer sequencer = new Sequencer(udpLayer);
         HoldBackQueue queue = new HoldBackQueue();
+        
+        // 3. Create Game Views
+        ClientGameState clientGame = new ClientGameState(); // My View
 
-        // 3. Wire Dependencies
-        tcpLayer.setHoldBackQueue(queue);
-        sequencer.setTcpLayer(tcpLayer);
-        sequencer.setLocalQueue(queue);
+        // 4. Wire Dependencies (The "Spaghetti" Cleanup)
+        
+        // Networking <-> Consensus
         tcpLayer.setElectionManager(election);
         tcpLayer.setSequencer(sequencer);
-        udpLayer.setHoldBackQueue(queue);
+        tcpLayer.setHoldBackQueue(queue); // For incoming repairs
+        
+        udpLayer.setHoldBackQueue(queue); // For incoming moves
+        
+        // Consensus <-> Networking
+        sequencer.setTcpLayer(tcpLayer);
+        sequencer.setLocalQueue(queue);   // Short-circuit
+        
+        queue.setTcpLayer(tcpLayer);      // For sending NACKs
+        
+        // Networking <-> Game Logic (NEW)
+        tcpLayer.setClientGame(clientGame);
+        queue.setClientGame(clientGame);
 
-        // 4. Start Threads
+        // 5. Start System
         tcpLayer.start();
         udpLayer.start();
         election.startStabilizationPeriod();
 
-        // 5. START SIMULATION (The new part)
-        // Waits for leader, then occasionally sends a move.
-        new Thread(() -> startSimulation(myTcpPort, election, tcpLayer, sequencer)).start();
+        // 6. Background Thread: Manage "Server" Role
+        new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(1000);
+                    // Update Queue with current Leader ID (for NACKs)
+                    queue.setLeaderId(election.currentLeaderId);
 
-        // Keep main thread alive
-        while(true) { try { Thread.sleep(1000); } catch (Exception e){} }
+                    // If I am Leader, ensure Server Logic exists
+                    if (election.iAmLeader) {
+                        if (serverGame == null) {
+                            System.out.println(">>> I AM THE DEALER <<<");
+                            serverGame = new TexasHoldem(myPort, tcpLayer, sequencer);
+                            // Auto-add existing peers
+                            for (int peerId : tcpLayer.getConnectedPeerIds()) {
+                                serverGame.addPlayer(peerId);
+                            }
+                        }
+                    } else {
+                        serverGame = null; // Save memory
+                    }
+                } catch (Exception e) {}
+            }
+        }).start();
+
+        // 7. COMMAND LOOP (User Input)
+        handleUserCommands(myPort, tcpLayer, sequencer, election);
     }
 
-    private static void startSimulation(int myPort, ElectionManager election, TcpMeshManager tcp, Sequencer sequencer) {
-        Random rand = new Random();
-        String[] actions = {"Bet 10", "Fold", "Check", "Call", "All-In"};
+    private static void handleUserCommands(int myPort, TcpMeshManager tcp, Sequencer sequencer, ElectionManager election) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("\nCOMMANDS: 'start' (Leader), 'bet <amt>', 'fold', 'check', 'allin'");
+        
+        while (true) {
+            String line = scanner.nextLine().trim(); // FIX 1: Remove spaces
+            if (line.isEmpty()) continue;            // FIX 2: Ignore empty Enters
 
-        try {
-            // Wait 10s for election to settle
-            Thread.sleep(10000);
-            System.out.println("\n--- SIMULATION STARTED: Sending Random Moves ---\n");
+            String[] parts = line.split("\\s+");     // FIX 3: Handle multiple spaces
+            String cmd = parts[0].toLowerCase();
 
-            while (true) {
-                // Wait a random time (3-8 seconds) so nodes don't spam all at once
-                Thread.sleep(3000 + rand.nextInt(5000));
+            try {
+                switch (cmd) {
+                    case "start":
+                        if (serverGame != null) {
+                            serverGame.startNewRound();
+                        } else {
+                            System.out.println("Only the Leader can start the game.");
+                        }
+                        break;
 
-                int leaderId = election.currentLeaderId;
-                if (leaderId == -1) {
-                    System.out.println("[Sim] No Leader yet. Waiting...");
-                    continue;
+                    case "bet":
+                    case "fold":
+                    case "check":
+                    case "call":
+                    case "allin":
+                        // Construct Action Payload
+                        String payload = cmd;
+                        if (parts.length > 1) payload += " " + parts[1]; // e.g., "bet 20"
+                        
+                        GameMessage actionMsg = new GameMessage(
+                            GameMessage.Type.ACTION_REQUEST, 
+                            "local", 
+                            myPort, 
+                            payload
+                        );
+
+                        // Send to Leader (or Short-circuit if WE are Leader)
+                        if (election.iAmLeader) {
+                            sequencer.multicastAction(actionMsg);
+                        } else if (election.currentLeaderId != -1) {
+                            tcp.sendToPeer(election.currentLeaderId, actionMsg);
+                        } else {
+                            System.out.println("No Leader found yet.");
+                        }
+                        break;
+
+                    case "status":
+                        System.out.println("Leader: " + election.currentLeaderId + " | My ID: " + myPort);
+                        break;
+                        
+                    case "quit":
+                        System.exit(0);
+                        break;
+
+                    default:
+                        System.out.println("Unknown command.");
                 }
-
-                // Pick a random move
-                String move = actions[rand.nextInt(actions.length)];
-                String payload = "Player " + myPort + ": " + move;
-
-                // Create the request
-                GameMessage request = new GameMessage(
-                    GameMessage.Type.ACTION_REQUEST, 
-                    "localhost", 
-                    myPort, 
-                    payload
-                );
-
-                // LOGIC: specific path depending on if I am Leader or not
-                if (election.iAmLeader) {
-                    System.out.println("[Sim] I am Leader. Multicasting directly.");
-                    sequencer.multicastAction(request);
-                } else {
-                    System.out.println("[Sim] Sending Request to Leader (" + leaderId + ")");
-                    tcp.sendToPeer(leaderId, request);
-                }
+            } catch (Exception e) {
+                System.out.println("Error processing command: " + e.getMessage());
             }
-        } catch (InterruptedException e) {
-            e.printStackTrace();
         }
     }
 }

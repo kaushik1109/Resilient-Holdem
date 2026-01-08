@@ -3,6 +3,7 @@ package networking;
 import consensus.ElectionManager;
 import consensus.HoldBackQueue;
 import consensus.Sequencer;
+import game.ClientGameState;
 
 import java.io.*;
 import java.net.*;
@@ -24,9 +25,15 @@ public class TcpMeshManager {
     private Sequencer sequencer;
     
     private HoldBackQueue holdBackQueue;
+    
+    private ClientGameState clientGame; 
 
     public TcpMeshManager(int port) {
         this.myPort = port;
+    }
+    
+    public void setClientGame(ClientGameState game) {
+        this.clientGame = game;
     }
 
     public void setHoldBackQueue(HoldBackQueue q) {
@@ -151,9 +158,27 @@ private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStrea
                         break;
                         
                     case ORDERED_MULTICAST:
+                    case PLAYER_ACTION: // Handle both just in case
                         if (holdBackQueue != null) holdBackQueue.addMessage(msg);
                         break;
-                        
+
+                    case YOUR_HAND:
+                        // "Psst, here are your cards" (TCP Private Message)
+                        if (clientGame != null) {
+                            clientGame.onReceiveHand(msg.payload);
+                        }
+                        break;
+
+                    case ACTION_REQUEST:
+                        if (sequencer != null) {
+                            // Success! We are the Leader, so we order the message.
+                            System.out.println("[TCP] Received Action Request: " + msg.payload);
+                            sequencer.multicastAction(msg);
+                        } else {
+                            // Failure! We received a request but we aren't the Leader/Sequencer.
+                            System.err.println("[TCP] Received ACTION_REQUEST but I am not the Sequencer!");
+                        }
+                        break;
                     // Forward Election/Coordinator messages
                     case ELECTION:
                     case ELECTION_OK:
@@ -162,6 +187,7 @@ private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStrea
                         break;
                         
                     default:
+                        System.out.println("[TCP] IGNORED Unknown Message Type: " + msg.type);
                         break;
                 }
             }
@@ -184,11 +210,25 @@ private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStrea
     
     public void sendToPeer(int targetPeerId, GameMessage msg) {
         Peer peer = peers.get(targetPeerId);
+
+        if (peer == null) {
+            connectToPeer("localhost", targetPeerId); 
+            try { Thread.sleep(500); } catch(Exception e){} // Increased wait to 500ms
+            peer = peers.get(targetPeerId);
+        }
+
         if (peer != null) {
             try {
-                peer.out.writeObject(msg);
-                peer.out.flush();
-            } catch (IOException e) { e.printStackTrace(); }
+                synchronized(peer.out) {
+                    peer.out.writeObject(msg);
+                    peer.out.flush();
+                }
+            } catch (IOException e) {
+                System.err.println("[TCP ERROR] Write failed: " + e.getMessage());
+                peers.remove(targetPeerId);
+            }
+        } else {
+            System.err.println("[TCP ERROR] Connection failed. Peer " + targetPeerId + " is not in map.");
         }
     }
 
