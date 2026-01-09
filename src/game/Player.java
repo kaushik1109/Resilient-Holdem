@@ -12,12 +12,14 @@ public class Player implements Serializable {
     public boolean folded = false;
     public boolean allIn = false;
     public List<Card> holeCards = new ArrayList<>();
+    public boolean isActive = true; // NEW: False if they join mid-game
 
     public Player(int id, int startChips) {
         this.id = id;
         this.name = "Player " + id;
         this.chips = startChips;
         this.currentBet = 0;
+        this.isActive = true; // Default to active
     }
 
     public void resetForNewHand() {
@@ -25,5 +27,6 @@ public class Player implements Serializable {
         allIn = false;
         currentBet = 0;
         holeCards.clear();
+        isActive = true; // Everyone plays in the new round
     }
 }

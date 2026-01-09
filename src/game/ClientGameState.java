@@ -26,4 +26,14 @@ public class ClientGameState {
         this.status = msg;
         System.out.println(">>> GAME INFO: " + msg);
     }
+    
+    public void printBoard() {
+        if (myHand.isEmpty()) {
+            System.out.println(">>> MY HAND: [Spectating]");
+        } else {
+            System.out.println(">>> MY HAND: " + myHand);
+        }
+        System.out.println(">>> BOARD: " + communityCards);
+        System.out.println(">>> INFO: " + status);
+    }
 }

@@ -9,6 +9,7 @@ public class GameMessage implements Serializable {
         JOIN_REQUEST, JOIN_ACCEPT,
         HEARTBEAT,
         ELECTION, ELECTION_OK, COORDINATOR,
+        SYNC,
 
         LEAVE, //TODO: not actually sent
         

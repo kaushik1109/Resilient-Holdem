@@ -48,6 +48,22 @@ public class Main {
         // Networking <-> Game Logic (NEW)
         tcpLayer.setClientGame(clientGame);
         queue.setClientGame(clientGame);
+        queue.setCallback(msg -> {
+        if (election.iAmLeader && serverGame != null) {
+            if (msg.type == GameMessage.Type.PLAYER_ACTION) {
+                serverGame.processAction(msg.tcpPort, msg.payload);
+            }
+        }
+    });
+
+        tcpLayer.setRequestHandler(msg -> {
+            // Only the Leader processes requests
+            if (election.iAmLeader && serverGame != null) {
+                serverGame.handleClientRequest(msg);
+            } else {
+                System.out.println("Received Request but I am not Leader/Ready.");
+            }
+        });
 
         // 5. Start System
         tcpLayer.start();
@@ -71,6 +87,10 @@ public class Main {
                             for (int peerId : tcpLayer.getConnectedPeerIds()) {
                                 serverGame.addPlayer(peerId);
                             }
+                        }
+
+                        for (int peerId : tcpLayer.getConnectedPeerIds()) {
+                            serverGame.addPlayer(peerId); // This now triggers the Welcome Package!
                         }
                     } else {
                         serverGame = null; // Save memory

@@ -57,7 +57,9 @@ public class UdpMulticastManager {
                 ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
                 GameMessage msg = (GameMessage) ois.readObject();
 
-                if (msg.tcpPort == myTcpPort) continue;
+                if (msg.tcpPort == myTcpPort && msg.sequenceNumber <= 0) {
+                    continue; 
+                }
                 
                 switch (msg.type) {
                     case JOIN_REQUEST:
@@ -65,11 +67,13 @@ public class UdpMulticastManager {
                         connectionManager.connectToPeer(msg.senderAddress, msg.tcpPort);
                         break;
 
-                    case ORDERED_MULTICAST:
-                        // This is a game move (e.g., "Bet 20, Seq #5")
-                        // We must NOT process it yet. We give it to the queue.
+                    case ORDERED_MULTICAST: 
+                    case PLAYER_ACTION:
+                    case GAME_STATE:
+                    case COMMUNITY_CARDS:
+                    case SHOWDOWN:
                         if (holdBackQueue != null) {
-                            holdBackQueue.addMessage(msg); 
+                            holdBackQueue.addMessage(msg);
                         }
                         break;
                         

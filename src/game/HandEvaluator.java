@@ -55,4 +55,33 @@ public class HandEvaluator {
             .max(Integer::compare)
             .orElse(0);
     }
+
+    public static String getHandDescription(int score) {
+        int rankValue = score / 1000000;
+        int kickerValue = score % 1000000;
+        
+        String rankName = "Unknown";
+        for (HandRank hr : HandRank.values()) {
+            if (hr.value == rankValue) {
+                rankName = hr.name(); // e.g., "FLUSH"
+                break;
+            }
+        }
+        
+        // Convert "14" back to "Ace", "13" to "King"
+        String kickerName = getRankName(kickerValue);
+        
+        // Make it readable: "FLUSH (Ace High)" or "PAIR (King High)"
+        return rankName + " (" + kickerName + " High)";
+    }
+    
+    private static String getRankName(int val) {
+        switch (val) {
+            case 14: return "Ace";
+            case 13: return "King";
+            case 12: return "Queen";
+            case 11: return "Jack";
+            default: return String.valueOf(val);
+        }
+    }
 }

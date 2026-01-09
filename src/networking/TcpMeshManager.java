@@ -9,6 +9,7 @@ import java.io.*;
 import java.net.*;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 
 public class TcpMeshManager {
     private static final int HEARTBEAT_INTERVAL = 2000; // Send every 2s
@@ -27,10 +28,16 @@ public class TcpMeshManager {
     private HoldBackQueue holdBackQueue;
     
     private ClientGameState clientGame; 
+    private Consumer<GameMessage> requestHandler;
 
     public TcpMeshManager(int port) {
         this.myPort = port;
     }
+
+    public void setRequestHandler(Consumer<GameMessage> handler) {
+        this.requestHandler = handler;
+    }
+
     
     public void setClientGame(ClientGameState game) {
         this.clientGame = game;
@@ -148,38 +155,48 @@ private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStrea
                         
                     case LEAVE:
                         System.out.println("[TCP] Peer " + peerId + " is shutting down gracefully.");
-                        // We close the connection explicitly.
-                        // This triggers 'handleNodeFailure' inside closeConnection()
                         closeConnection(peerId);
                         return; // Stop the thread
                         
                     case NACK:
                         if (sequencer != null) sequencer.handleNack(msg, peerId);
                         break;
-                        
-                    case ORDERED_MULTICAST:
-                    case PLAYER_ACTION: // Handle both just in case
-                        if (holdBackQueue != null) holdBackQueue.addMessage(msg);
-                        break;
 
                     case YOUR_HAND:
-                        // "Psst, here are your cards" (TCP Private Message)
                         if (clientGame != null) {
                             clientGame.onReceiveHand(msg.payload);
                         }
                         break;
 
                     case ACTION_REQUEST:
-                        if (sequencer != null) {
-                            // Success! We are the Leader, so we order the message.
-                            System.out.println("[TCP] Received Action Request: " + msg.payload);
-                            sequencer.multicastAction(msg);
-                        } else {
-                            // Failure! We received a request but we aren't the Leader/Sequencer.
-                            System.err.println("[TCP] Received ACTION_REQUEST but I am not the Sequencer!");
+                        if (requestHandler != null) {
+                            requestHandler.accept(msg);
                         }
                         break;
-                    // Forward Election/Coordinator messages
+                    
+                    case ORDERED_MULTICAST:
+                    case PLAYER_ACTION:
+                    case GAME_STATE:
+                    case COMMUNITY_CARDS:
+                    case SHOWDOWN:
+                        if (electionManager != null) {
+                            electionManager.currentLeaderId = msg.tcpPort;
+                        }
+                        
+                        if (holdBackQueue != null) holdBackQueue.addMessage(msg);
+                        break;
+
+                    case SYNC:
+                        if (electionManager != null) {
+                            electionManager.currentLeaderId = msg.tcpPort;
+                        }
+
+                        if (holdBackQueue != null) {
+                            long seqToJump = Long.parseLong(msg.payload);
+                            holdBackQueue.forceSync(seqToJump);
+                        }
+                        break;
+
                     case ELECTION:
                     case ELECTION_OK:
                     case COORDINATOR:

@@ -31,38 +31,39 @@ public class Sequencer {
     public void setTcpLayer(TcpMeshManager tcp) {
         this.tcpLayer = tcp;
     }
+    
+    public long getCurrentSeqId() {
+        return globalSequenceId.get();
+    }
 
-    /**
-     * Called when we (The Leader) receive a request to broadcast an action.
-     * e.g. "Peer A wants to Bet 20"
-     */
     public void multicastAction(GameMessage originalRequest) {
-        // 1. Stamp the ticket (Assign Sequence ID)
         long seqId = globalSequenceId.incrementAndGet();
-        
-        // 2. Create the ORDERED packet
-        // We preserve the original sender's info so peers know who bet
+
+        // FIX 1: Preserve the Original Type (don't force ORDERED_MULTICAST)
+        // We only change it if it was a raw ACTION_REQUEST
+        GameMessage.Type typeToSend = originalRequest.type;
+        if (typeToSend == GameMessage.Type.ACTION_REQUEST) {
+            typeToSend = GameMessage.Type.PLAYER_ACTION;
+        }
+
         GameMessage orderedMsg = new GameMessage(
-            GameMessage.Type.ORDERED_MULTICAST,
+            typeToSend, // Use the smart type
             originalRequest.senderAddress,
             originalRequest.tcpPort,
             originalRequest.payload,
             seqId
         );
 
-        // 3. Save to History (for fault tolerance later)
         historyBuffer.put(seqId, orderedMsg);
+        System.out.println("[Sequencer] Broadcasting #" + seqId + " (" + typeToSend + "): " + originalRequest.payload);
+
+        // FIX 2: Network FIRST, Local SECOND
+        // This prevents "Nested Multicast" where inner messages go out before outer ones
+        udpLayer.sendMulticast(orderedMsg); 
         
-        System.out.println("[Sequencer] Broadcasting Action #" + seqId + ": " + originalRequest.payload);
-        
-        
-        // 3.5 Send to self first 
         if (localQueue != null) {
             localQueue.addMessage(orderedMsg);
         }
-
-        // 4. Send via UDP
-        udpLayer.sendMulticast(orderedMsg);
     }
 
     public void handleNack(GameMessage nackMsg, int requestorId) {

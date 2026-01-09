@@ -16,12 +16,26 @@ public class ElectionManager {
         this.connectionManager = connectionManager;
     }
 
-    public void startStabilizationPeriod() {
+public void startStabilizationPeriod() {
+        // NEW LOGIC: Passive Startup
         new Thread(() -> {
+            System.out.println("[Election] Listening for existing Leader...");
+            
             try {
-                Thread.sleep(5000);
+                // Wait 3 seconds to receive a Heartbeat or Game State from an existing Leader
+                Thread.sleep(3000); 
+            } catch (InterruptedException e) { }
+
+            if (currentLeaderId != -1) {
+                // We found a leader! Do NOT start an election.
+                // Even if my ID is higher, I respect the incumbent to preserve Game State.
+                System.out.println("[Election] Respecting existing Leader: " + currentLeaderId);
+            } else {
+                // Silence... No one is in charge.
+                // OK, now I can use my high ID to become the Leader.
+                System.out.println("[Election] No Leader found. Starting Election...");
                 startElection("Startup");
-            } catch (InterruptedException e) { e.printStackTrace(); }
+            }
         }).start();
     }
 
