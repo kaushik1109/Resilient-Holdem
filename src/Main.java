@@ -82,7 +82,7 @@ public class Main {
                     if (election.iAmLeader) {
                         if (serverGame == null) {
                             System.out.println(">>> I AM THE DEALER <<<");
-                            serverGame = new TexasHoldem(myPort, tcpLayer, sequencer);
+                            serverGame = new TexasHoldem(myPort, tcpLayer, sequencer, election, queue);
                             // Auto-add existing peers
                             for (int peerId : tcpLayer.getConnectedPeerIds()) {
                                 serverGame.addPlayer(peerId);

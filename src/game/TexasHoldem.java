@@ -3,6 +3,8 @@ package game;
 import java.util.*;
 import networking.GameMessage;
 import networking.TcpMeshManager;
+import consensus.ElectionManager;
+import consensus.HoldBackQueue;
 import consensus.Sequencer;
 
 public class TexasHoldem {
@@ -26,58 +28,62 @@ public class TexasHoldem {
     
     // Track how many people have acted in the CURRENT phase
     private int playersActedThisPhase = 0;
+    private HoldBackQueue localQueue;
+    private ElectionManager electionManager;
 
-    private List<Player> activePlayers = new ArrayList<>(); // Players in the current hand
-    private List<Player> allPlayers = new ArrayList<>();
-
-    public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq) {
+public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManager election, consensus.HoldBackQueue queue) {
         this.myTcpPort = myPort;
         this.tcpLayer = tcp;
         this.sequencer = seq;
+        this.electionManager = election;
+        this.localQueue = queue;
         this.deck = new Deck();
+        
+        this.localQueue.forceSync(sequencer.getCurrentSeqId());
+        System.out.println("[Game] Local Queue Synced to Leader Sequencer.");
     }
 
     public void addPlayer(int playerId) {
         if (playerId == myTcpPort) return;
-        
-        // If player is already known, do nothing
         if (players.stream().anyMatch(p -> p.id == playerId)) return;
 
         Player newPlayer = new Player(playerId, 1000);
         
-        // 1. Check if they are late
+        // --- FIX 2: ALWAYS Send SYNC ---
+        // Whether game is running or not, the player needs to know 
+        // that the Sequence ID has reset to 0.
+        sendSyncPacket(playerId); 
+
         if (gameInProgress) {
-            newPlayer.isActive = false; // Sit them out
-            newPlayer.folded = true;    // Treat as folded for logic safety
+            newPlayer.isActive = false; 
+            newPlayer.folded = true;   
             System.out.println("[Game] Spectator " + playerId + " joined mid-game.");
-            
-            // 2. SEND STATE DUMP (The Welcome Package)
-            sendWelcomePackage(playerId);
+            sendStateDump(playerId); // Only send Board/Pot if game is running
         } else {
             System.out.println("[Game] Player " + playerId + " joined (Waiting for start).");
         }
         
         players.add(newPlayer);
     }
-    
-private void sendWelcomePackage(int targetId) {
-        // 1. Send the SYNC command (CRITICAL FIX)
+    // Helper to just send the Sequence ID reset
+    private void sendSyncPacket(int targetId) {
         long currentSeq = sequencer.getCurrentSeqId();
         tcpLayer.sendToPeer(targetId, new GameMessage(
             GameMessage.Type.SYNC, "Leader", myTcpPort, String.valueOf(currentSeq)
         ));
+    }
 
-        // 2. Send the Board (if any)
+    // Renamed old 'sendWelcomePackage' to 'sendStateDump' for clarity
+    private void sendStateDump(int targetId) {
+        // Send Community Cards
         if (!communityCards.isEmpty()) {
             StringBuilder sb = new StringBuilder();
             for (Card c : communityCards) sb.append(c.toString()).append(",");
-            
             tcpLayer.sendToPeer(targetId, new GameMessage(
                 GameMessage.Type.COMMUNITY_CARDS, "Leader", myTcpPort, sb.toString()
             ));
         }
-
-        // 3. Send Game Info
+        // Send Pot/Status
         String stateMsg = "Spectating... (Pot: " + pot + ")";
         tcpLayer.sendToPeer(targetId, new GameMessage(
             GameMessage.Type.GAME_STATE, "Leader", myTcpPort, stateMsg
@@ -359,6 +365,14 @@ private void sendWelcomePackage(int targetId) {
                 GameMessage.Type.SHOWDOWN, "Leader", myTcpPort, summary.toString()
             ));
         }
+        
+        System.out.println("[Game] Hand finished. Rotating Dealer...");
+        
+        // Wait 3 seconds so everyone can see the result before the server dies
+        new Thread(() -> {
+            try { Thread.sleep(3000); } catch (Exception e) {}
+            electionManager.passLeadership(); 
+        }).start();
         
         gameInProgress = false;
     }

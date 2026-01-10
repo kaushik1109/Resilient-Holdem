@@ -2,13 +2,16 @@ package consensus;
 
 import networking.TcpMeshManager;
 import networking.GameMessage;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class ElectionManager {
     private int myId;
     private TcpMeshManager connectionManager;
     
     private volatile boolean electionInProgress = false;
-    public volatile boolean iAmLeader = false; // Made volatile for thread safety
+    public volatile boolean iAmLeader = false; 
     public int currentLeaderId = -1;
 
     public ElectionManager(int myId, TcpMeshManager connectionManager) {
@@ -16,37 +19,55 @@ public class ElectionManager {
         this.connectionManager = connectionManager;
     }
 
-public void startStabilizationPeriod() {
-        // NEW LOGIC: Passive Startup
+    public void startStabilizationPeriod() {
         new Thread(() -> {
-            System.out.println("[Election] Listening for existing Leader...");
+            System.out.println("[Election] Listening for authoritative Leader signals...");
+            currentLeaderId = -1; // Reset to unknown
             
             try {
-                // Wait 3 seconds to receive a Heartbeat or Game State from an existing Leader
                 Thread.sleep(3000); 
             } catch (InterruptedException e) { }
 
             if (currentLeaderId != -1) {
-                // We found a leader! Do NOT start an election.
-                // Even if my ID is higher, I respect the incumbent to preserve Game State.
                 System.out.println("[Election] Respecting existing Leader: " + currentLeaderId);
             } else {
-                // Silence... No one is in charge.
-                // OK, now I can use my high ID to become the Leader.
                 System.out.println("[Election] No Leader found. Starting Election...");
                 startElection("Startup");
             }
         }).start();
     }
 
-    public synchronized void startElection(String reason) {
-        if (iAmLeader) {
-            return;
-        }
+    // --- NEW: Round Robin Logic ---
+    public void passLeadership() {
+        if (!iAmLeader) return;
+
+        // 1. Get all candidates (Peers + Me)
+        List<Integer> allNodes = new ArrayList<>(connectionManager.getConnectedPeerIds());
+        allNodes.add(myId);
+        Collections.sort(allNodes); // Order them: 5000, 5001, 5002
+
+        // 2. Find My Index
+        int myIndex = allNodes.indexOf(myId);
         
-        if (electionInProgress) {
-            return;
-        }
+        // 3. Pick Next (Wrap around)
+        int nextIndex = (myIndex + 1) % allNodes.size();
+        int nextLeaderId = allNodes.get(nextIndex);
+
+        System.out.println("[Election] Handing over leadership to Node " + nextLeaderId);
+
+        // 4. Resign Locally
+        iAmLeader = false;
+        currentLeaderId = nextLeaderId;
+
+        // 5. Broadcast the Decree (This forces everyone to accept the new leader)
+        connectionManager.broadcastToAll(new GameMessage(
+            GameMessage.Type.COORDINATOR, "", nextLeaderId, "Rotation"
+        ));
+    }
+
+    // --- Existing Bully Algorithm (For Crashes) ---
+    public synchronized void startElection(String reason) {
+        if (iAmLeader || electionInProgress) return;
         
         electionInProgress = true;
         iAmLeader = false; 
@@ -54,6 +75,7 @@ public void startStabilizationPeriod() {
 
         boolean sentChallenge = false;
         
+        // Standard Bully: Only challenge higher IDs
         for (int peerId : connectionManager.getConnectedPeerIds()) {
             if (peerId > myId) {
                 connectionManager.sendToPeer(peerId, new GameMessage(
@@ -68,7 +90,7 @@ public void startStabilizationPeriod() {
             return;
         }
 
-        // Timeout thread
+        // Timeout waiting for "Stop" from higher nodes
         new Thread(() -> {
             try {
                 Thread.sleep(2000); 
@@ -80,13 +102,10 @@ public void startStabilizationPeriod() {
 
     private synchronized void declareVictory() {
         if (!electionInProgress) return;
-
-        System.out.println("[Election] I am the leader");
-        
+        System.out.println("[Election] I am the new Leader (Victory)");
         iAmLeader = true;
         currentLeaderId = myId;
         electionInProgress = false;
-        
         connectionManager.broadcastToAll(new GameMessage(
             GameMessage.Type.COORDINATOR, "", myId, "Victory"
         ));
@@ -95,6 +114,7 @@ public void startStabilizationPeriod() {
     public void handleMessage(GameMessage msg) {
         switch (msg.type) {
             case ELECTION:
+                // Only respond if we have a higher ID
                 if (msg.tcpPort < myId) {
                     connectionManager.sendToPeer(msg.tcpPort, new GameMessage(
                         GameMessage.Type.ELECTION_OK, "", myId, "Stop"
@@ -104,33 +124,25 @@ public void startStabilizationPeriod() {
                 break;
 
             case ELECTION_OK:
-                if (electionInProgress) {
-                    electionInProgress = false;
-                }
+                if (electionInProgress) electionInProgress = false;
                 break;
 
             case COORDINATOR:
+                // ACCEPT THE NEW RULER (Whether from Election or Rotation)
                 currentLeaderId = msg.tcpPort;
                 iAmLeader = (currentLeaderId == myId);
                 electionInProgress = false;
-                System.out.println("[Election] New Leader: " + msg.tcpPort);
+                System.out.println("[Election] New Leader: " + msg.tcpPort + " (Reason: " + msg.payload + ")");
                 break;
-            
-            default:
-                break;
+                
+            default: break;
         }
     }
     
-    /**
-     * Called by TCP Layer when a node crashes or times out.
-     */
     public void handleNodeFailure(int deadNodeId) {
         System.out.println("[Election] Detected failure of Node " + deadNodeId);
-        
         if (deadNodeId == currentLeaderId) {
-            System.err.println(">>> THE LEADER HAS DIED! STARTING ELECTION! <<<");
-            
-            // Wait brief moment to ensure socket cleanup, then start
+            System.err.println(">>> THE LEADER HAS DIED! STARTING RECOVERY! <<<");
             new Thread(() -> {
                 try { Thread.sleep(500); } catch(Exception e){}
                 startElection("Leader Crash");
