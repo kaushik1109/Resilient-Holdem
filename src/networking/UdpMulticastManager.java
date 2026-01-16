@@ -5,37 +5,27 @@ import java.net.*;
 import java.util.Enumeration;
 
 import consensus.HoldBackQueue;
+import game.NodeContext;
 
 public class UdpMulticastManager {
-    private static final String MULTICAST_GROUP = "239.255.1.1";
+private static final String MULTICAST_GROUP = "239.255.1.1";
     private static final int MULTICAST_PORT = 8888;
     
+    private final int myTcpPort;
+    private final NodeContext context; // Reference to Router
     private boolean running = true;
-    private int myTcpPort;
 
-    private TcpMeshManager connectionManager;
-    
-    private HoldBackQueue holdBackQueue;
-
-    public UdpMulticastManager(int tcpPort, TcpMeshManager manager) {
+    public UdpMulticastManager(int tcpPort, NodeContext context) {
         this.myTcpPort = tcpPort;
-        this.connectionManager = manager;
+        this.context = context;
     }
 
-    public void setHoldBackQueue(HoldBackQueue q) { this.holdBackQueue = q; }
-
     public void start() {
-        // 1. Start listening for others
         new Thread(this::listenForBroadcasts).start();
         
-        // 2. Shout "I am here" exactly ONCE. Later this should be on a loop but that would have to be reconciled
-        // with game logic
-        try {
-            Thread.sleep(500); // Wait briefly for listener to spin up
-            broadcastJoinRequest();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        new Thread(() -> {
+            try { Thread.sleep(500); broadcastJoinRequest(); } catch (Exception e) {}
+        }).start();
     }
 
     private void listenForBroadcasts() {
@@ -43,12 +33,9 @@ public class UdpMulticastManager {
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
             InetSocketAddress groupAddress = new InetSocketAddress(group, MULTICAST_PORT);
             
-            // Find a valid network interface (WiFi/Ethernet)
             NetworkInterface netIf = findValidNetworkInterface();
-            socket.joinGroup(groupAddress, netIf); // Modern join
-
-            System.out.println("[UDP] Listening on " + MULTICAST_GROUP + " via " + netIf.getName());
-
+            socket.joinGroup(groupAddress, netIf);
+            
             byte[] buffer = new byte[4096];
             while (running) {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -57,35 +44,17 @@ public class UdpMulticastManager {
                 ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
                 GameMessage msg = (GameMessage) ois.readObject();
 
-                if (msg.tcpPort == myTcpPort && msg.sequenceNumber <= 0) {
-                    continue; 
-                }
-                
-                switch (msg.type) {
-                    case JOIN_REQUEST:
-                        System.out.println("[UDP] Found peer: " + msg.senderAddress + ":" + msg.tcpPort);
-                        connectionManager.connectToPeer(msg.senderAddress, msg.tcpPort);
-                        break;
+                if (msg.tcpPort == myTcpPort && msg.sequenceNumber <= 0) continue;
 
-                    case ORDERED_MULTICAST: 
-                    case PLAYER_ACTION:
-                    case GAME_STATE:
-                    case COMMUNITY_CARDS:
-                    case SHOWDOWN:
-                        if (holdBackQueue != null) {
-                            holdBackQueue.addMessage(msg);
-                        }
-                        break;
-                        
-                    default:
-                        break;
+                if (msg.type == GameMessage.Type.JOIN_REQUEST) {
+                    context.tcp.connectToPeer(msg.senderAddress, msg.tcpPort);
+                } 
+                
+                else {
+                    context.routeMessage(msg);
                 }
             }
-            
-            socket.leaveGroup(groupAddress, netIf);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
     private void broadcastJoinRequest() {
@@ -111,7 +80,6 @@ public class UdpMulticastManager {
         }
     }
 
-    // TODO: understand this better before evaluation; has some mac specific stuff
     private NetworkInterface findValidNetworkInterface() throws SocketException {
         Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
         for (NetworkInterface netIf : java.util.Collections.list(nets)) {

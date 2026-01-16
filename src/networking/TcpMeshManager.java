@@ -1,57 +1,27 @@
 package networking;
 
-import consensus.ElectionManager;
-import consensus.HoldBackQueue;
-import consensus.Sequencer;
-import game.ClientGameState;
-
+import game.NodeContext;
 import java.io.*;
 import java.net.*;
 import java.util.Set;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
 
 public class TcpMeshManager {
-    private static final int HEARTBEAT_INTERVAL = 2000; // Send every 2s
-    private static final int TIMEOUT_THRESHOLD = 6000;  // Die after 6s silence
+    private static final int HEARTBEAT_INTERVAL = 2000;
+    private static final int TIMEOUT_THRESHOLD = 6000;
 
-    private int myPort;
+    private final int myPort;
+    private final NodeContext context; // Reference to the Router
     private ServerSocket serverSocket;
     private boolean running = true;
     
     private ConcurrentHashMap<Integer, Peer> peers = new ConcurrentHashMap<>();
-    
-    private ElectionManager electionManager;
 
-    private Sequencer sequencer;
-    
-    private HoldBackQueue holdBackQueue;
-    
-    private ClientGameState clientGame; 
-    private Consumer<GameMessage> requestHandler;
-
-    public TcpMeshManager(int port) {
+    // NEW Constructor takes Context
+    public TcpMeshManager(int port, NodeContext context) {
         this.myPort = port;
+        this.context = context;
     }
-
-    public void setRequestHandler(Consumer<GameMessage> handler) {
-        this.requestHandler = handler;
-    }
-
-    
-    public void setClientGame(ClientGameState game) {
-        this.clientGame = game;
-    }
-
-    public void setHoldBackQueue(HoldBackQueue q) {
-        this.holdBackQueue = q;
-    }
-
-    public void setElectionManager(ElectionManager em) {
-        this.electionManager = em;
-    }
-
-    public void setSequencer(Sequencer s) { this.sequencer = s; }
 
     public void start() {
         new Thread(this::startServer).start();
@@ -64,10 +34,90 @@ public class TcpMeshManager {
             serverSocket = new ServerSocket(myPort);
             System.out.println("[TCP] Server listening on port " + myPort);
             while (running) {
-                Socket clientSocket = serverSocket.accept();
-                handleNewConnection(clientSocket);
+                handleNewConnection(serverSocket.accept());
             }
         } catch (IOException e) { e.printStackTrace(); }
+    }
+
+    private void handleNewConnection(Socket socket) {
+        try {
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+
+            // Handshake
+            GameMessage handshake = new GameMessage(
+                GameMessage.Type.HEARTBEAT, socket.getLocalAddress().getHostAddress(), myPort, "HANDSHAKE"
+            );
+            out.writeObject(handshake);
+            out.flush();
+
+            new Thread(() -> listenToPeer(in, socket, out)).start();
+        } catch (IOException e) { e.printStackTrace(); }
+    }
+
+    private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStream out) {
+        int peerId = -1;
+        try {
+            while (running) {
+                GameMessage msg = (GameMessage) in.readObject();
+                
+                if (peerId == -1) {
+                    peerId = msg.tcpPort;
+                    peers.put(peerId, new Peer(socket.getInetAddress().getHostAddress(), peerId, socket, out));
+                }
+
+                Peer p = peers.get(peerId);
+                if (p != null) {
+                    p.lastSeenTimestamp = System.currentTimeMillis();
+                }
+                
+                context.routeMessage(msg);
+            }
+        } catch (Exception e) {
+            closeConnection(peerId);
+        }
+    }
+
+    public void connectToPeer(String ip, int port) {
+        if (peers.containsKey(port)) return;
+        try {
+            Socket socket = new Socket(ip, port);
+            handleNewConnection(socket);
+        } catch (IOException e) { /* Log error */ }
+    }
+
+    public void sendToPeer(int targetPeerId, GameMessage msg) {
+        Peer peer = peers.get(targetPeerId);
+        if (peer == null) {
+            // Auto-reconnect logic (simplified)
+            connectToPeer("localhost", targetPeerId);
+            try { Thread.sleep(200); } catch(Exception e){}
+            peer = peers.get(targetPeerId);
+        }
+
+        if (peer != null) {
+            try {
+                synchronized(peer.out) {
+                    peer.out.writeObject(msg);
+                    peer.out.flush();
+                }
+            } catch (IOException e) {
+                peers.remove(targetPeerId);
+            }
+        }
+    }
+
+    public void broadcastToAll(GameMessage msg) {
+        peers.values().forEach(p -> sendToPeer(p.peerId, msg));
+    }
+
+    public synchronized void closeConnection(int peerId) {
+        if (peerId != -1 && peers.containsKey(peerId)) {
+            Peer p = peers.remove(peerId);
+            try { p.socket.close(); } catch (Exception e) {}
+            // Notify Election Manager via Router logic (or direct call if exposed)
+            context.election.handleNodeFailure(peerId);
+        }
     }
     
     private void sendHeartbeats() {
@@ -98,171 +148,19 @@ public class TcpMeshManager {
             } catch (InterruptedException e) {}
         }
     }
-
-    public void connectToPeer(String ip, int port) {
-        System.out.println("[TCP] Connecting to Peer: " + ip + ":" + Integer.toString(port));
-        if (peers.containsKey(port)) return;
-
-        try {
-            Socket socket = new Socket(ip, port);
-            handleNewConnection(socket);
-        } catch (IOException e) {
-            System.err.println("[TCP] Failed to connect to " + ip + ":" + port);
-        }
-    }
-
-    private void handleNewConnection(Socket socket) {
-        try {
-            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-
-            // Tell the other side who WE are right now
-            GameMessage handshake = new GameMessage(
-                GameMessage.Type.HEARTBEAT, // Use HEARTBEAT or create a HANDSHAKE type
-                socket.getLocalAddress().getHostAddress(), 
-                myPort, 
-                "HANDSHAKE"
-            );
-            out.writeObject(handshake);
-            out.flush();
-
-            // Now start listening for their handshake
-            new Thread(() -> listenToPeer(in, socket, out)).start();
-
-        } catch (IOException e) { e.printStackTrace(); }
-    }
-
-private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStream out) {
-        int peerId = -1;
-        try {
-            while (running) {
-                GameMessage msg = (GameMessage) in.readObject();
-                
-                // 1. Registration (Same as before)
-                if (peerId == -1) {
-                    peerId = msg.tcpPort;
-                    peers.put(peerId, new Peer(socket.getInetAddress().getHostAddress(), peerId, socket, out));
-                }
-
-                // 2. Update Heartbeat Timestamp (Same as before)
-                Peer p = peers.get(peerId);
-                if (p != null) p.lastSeenTimestamp = System.currentTimeMillis();
-
-                // 3. Handle Message Types
-                switch (msg.type) {
-                    case HEARTBEAT:
-                        break; // Timestamp already updated above
-                        
-                    case LEAVE:
-                        System.out.println("[TCP] Peer " + peerId + " is shutting down gracefully.");
-                        closeConnection(peerId);
-                        return; // Stop the thread
-                        
-                    case NACK:
-                        if (sequencer != null) sequencer.handleNack(msg, peerId);
-                        break;
-
-                    case YOUR_HAND:
-                        if (clientGame != null) {
-                            clientGame.onReceiveHand(msg.payload);
-                        }
-                        break;
-
-                    case ACTION_REQUEST:
-                        if (requestHandler != null) {
-                            requestHandler.accept(msg);
-                        }
-                        break;
-                    
-                    case ORDERED_MULTICAST:
-                    case PLAYER_ACTION:
-                    case GAME_STATE:
-                    case COMMUNITY_CARDS:
-                    case SHOWDOWN:
-                        if (electionManager != null) {
-                            electionManager.currentLeaderId = msg.tcpPort;
-                        }
-                        
-                        if (holdBackQueue != null) holdBackQueue.addMessage(msg);
-                        break;
-
-                    case SYNC:
-                        if (electionManager != null) {
-                            electionManager.currentLeaderId = msg.tcpPort;
-                        }
-
-                        if (holdBackQueue != null) {
-                            long seqToJump = Long.parseLong(msg.payload);
-                            holdBackQueue.forceSync(seqToJump);
-                        }
-                        break;
-
-                    case ELECTION:
-                    case ELECTION_OK:
-                    case COORDINATOR:
-                        if (electionManager != null) electionManager.handleMessage(msg);
-                        break;
-                        
-                    default:
-                        System.out.println("[TCP] IGNORED Unknown Message Type: " + msg.type);
-                        break;
-                }
-            }
-        } catch (Exception e) {
-            // This catches "Connection Reset" (Hard Crash)
-            closeConnection(peerId);
-        }
-    }
-
-    public void broadcastToAll(GameMessage msg) {
-        for (Peer peer : peers.values()) {
-            try {
-                peer.out.writeObject(msg);
-                peer.out.flush();
-            } catch (IOException e) {
-                System.out.println("Failed to send to Node " + peer.peerId);
-            }
-        }
+    
+    // ElectionManager needs to ask: "Is the Leader dead?"
+    public boolean isPeerAlive(int peerId) {
+        return peers.containsKey(peerId);
     }
     
-    public void sendToPeer(int targetPeerId, GameMessage msg) {
-        Peer peer = peers.get(targetPeerId);
-
-        if (peer == null) {
-            connectToPeer("localhost", targetPeerId); 
-            try { Thread.sleep(500); } catch(Exception e){} // Increased wait to 500ms
-            peer = peers.get(targetPeerId);
-        }
-
-        if (peer != null) {
-            try {
-                synchronized(peer.out) {
-                    peer.out.writeObject(msg);
-                    peer.out.flush();
-                }
-            } catch (IOException e) {
-                System.err.println("[TCP ERROR] Write failed: " + e.getMessage());
-                peers.remove(targetPeerId);
-            }
-        } else {
-            System.err.println("[TCP ERROR] Connection failed. Peer " + targetPeerId + " is not in map.");
-        }
+    // OR allow ElectionManager to read the timestamp directly if you prefer strict timeouts
+    public long getPeerLastSeen(int peerId) {
+        Peer p = peers.get(peerId);
+        return (p != null) ? p.lastSeenTimestamp : 0;
     }
 
     public Set<Integer> getConnectedPeerIds() {
         return peers.keySet();
-    }
-
-    private synchronized void closeConnection(int peerId) {
-        if (peerId == -1 || !peers.containsKey(peerId)) return;
-        
-        System.out.println("[TCP] Closing connection to Node " + peerId);
-        Peer p = peers.remove(peerId);
-        try { p.socket.close(); } catch (Exception e) {}
-
-        // CRITICAL: Notify ElectionManager if a node dies!
-        if (electionManager != null) {
-            electionManager.handleNodeFailure(peerId);
-        }
     }
 }

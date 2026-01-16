@@ -141,6 +141,7 @@ public class ElectionManager {
     
     public void handleNodeFailure(int deadNodeId) {
         System.out.println("[Election] Detected failure of Node " + deadNodeId);
+        
         if (deadNodeId == currentLeaderId) {
             System.err.println(">>> THE LEADER HAS DIED! STARTING RECOVERY! <<<");
             new Thread(() -> {
