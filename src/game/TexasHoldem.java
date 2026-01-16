@@ -2,54 +2,39 @@ package game;
 
 import java.util.*;
 import networking.GameMessage;
-import networking.TcpMeshManager;
-import consensus.ElectionManager;
-import consensus.HoldBackQueue;
-import consensus.Sequencer;
 
 public class TexasHoldem {
-    private int myTcpPort;
-    private TcpMeshManager tcpLayer;
-    private Sequencer sequencer;
     
-    // Core Game Objects
+    private final NodeContext context;
+    
     private Deck deck;
     private List<Player> players = new ArrayList<>();
     private List<Card> communityCards = new ArrayList<>();
     
-    // Betting State
     private int pot = 0;
-    private int currentHighestBet = 0; // The amount to call
+    private int currentHighestBet = 0;
     private int currentPlayerIndex = 0;
     private boolean gameInProgress = false;
-
+    
     public enum Phase { PREFLOP, FLOP, TURN, RIVER, SHOWDOWN }
     private Phase currentPhase = Phase.PREFLOP;
-    
-    // Track how many people have acted in the CURRENT phase
     private int playersActedThisPhase = 0;
-    private HoldBackQueue localQueue;
-    private ElectionManager electionManager;
 
-public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManager election, consensus.HoldBackQueue queue) {
-        this.myTcpPort = myPort;
-        this.tcpLayer = tcp;
-        this.sequencer = seq;
-        this.electionManager = election;
-        this.localQueue = queue;
+    public TexasHoldem(NodeContext context) {
+        this.context = context;
         this.deck = new Deck();
         
-        this.localQueue.forceSync(sequencer.getCurrentSeqId());
+        // Sync Local Queue
+        this.context.queue.forceSync(context.sequencer.getCurrentSeqId());
         System.out.println("[Game] Local Queue Synced to Leader Sequencer.");
     }
 
     public void addPlayer(int playerId) {
-        if (playerId == myTcpPort) return;
+        if (playerId == context.myPort) return;
         if (players.stream().anyMatch(p -> p.id == playerId)) return;
 
         Player newPlayer = new Player(playerId, 1000);
         
-        // --- FIX 2: ALWAYS Send SYNC ---
         // Whether game is running or not, the player needs to know 
         // that the Sequence ID has reset to 0.
         sendSyncPacket(playerId); 
@@ -67,9 +52,9 @@ public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManage
     }
     // Helper to just send the Sequence ID reset
     private void sendSyncPacket(int targetId) {
-        long currentSeq = sequencer.getCurrentSeqId();
-        tcpLayer.sendToPeer(targetId, new GameMessage(
-            GameMessage.Type.SYNC, "Leader", myTcpPort, String.valueOf(currentSeq)
+        long currentSeq = context.sequencer.getCurrentSeqId();
+        context.tcp.sendToPeer(targetId, new GameMessage(
+            GameMessage.Type.SYNC, "Leader", context.myPort, String.valueOf(currentSeq)
         ));
     }
 
@@ -79,14 +64,14 @@ public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManage
         if (!communityCards.isEmpty()) {
             StringBuilder sb = new StringBuilder();
             for (Card c : communityCards) sb.append(c.toString()).append(",");
-            tcpLayer.sendToPeer(targetId, new GameMessage(
-                GameMessage.Type.COMMUNITY_CARDS, "Leader", myTcpPort, sb.toString()
+            context.tcp.sendToPeer(targetId, new GameMessage(
+                GameMessage.Type.COMMUNITY_CARDS, "Leader", context.myPort, sb.toString()
             ));
         }
         // Send Pot/Status
         String stateMsg = "Spectating... (Pot: " + pot + ")";
-        tcpLayer.sendToPeer(targetId, new GameMessage(
-            GameMessage.Type.GAME_STATE, "Leader", myTcpPort, stateMsg
+        context.tcp.sendToPeer(targetId, new GameMessage(
+            GameMessage.Type.GAME_STATE, "Leader", context.myPort, stateMsg
         ));
     }
 
@@ -112,8 +97,8 @@ public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManage
             Card c2 = deck.deal();
             p.holeCards.add(c1);
             p.holeCards.add(c2);
-            tcpLayer.sendToPeer(p.id, new GameMessage(
-                GameMessage.Type.YOUR_HAND, "Leader", myTcpPort, c1.toString() + "," + c2.toString()
+            context.tcp.sendToPeer(p.id, new GameMessage(
+                GameMessage.Type.YOUR_HAND, "Leader", context.myPort, c1.toString() + "," + c2.toString()
             ));
         }
         broadcastState("New Round! Pre-Flop Betting.");
@@ -142,7 +127,7 @@ public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManage
 
         // 4. IF VALID: Multicast it to the world
         // Only NOW does it become an "Official" game move
-        sequencer.multicastAction(msg);
+        context.sequencer.multicastAction(msg);
     }
 
     /**
@@ -319,8 +304,8 @@ public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManage
             sb.append(c.toString()).append(",");
         }
         // Broadcast the specific cards so UI can update
-        sequencer.multicastAction(new GameMessage(
-            GameMessage.Type.COMMUNITY_CARDS, "Leader", myTcpPort, sb.toString()
+        context.sequencer.multicastAction(new GameMessage(
+            GameMessage.Type.COMMUNITY_CARDS, "Leader", context.myPort, sb.toString()
         ));
     }
 
@@ -361,8 +346,8 @@ public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManage
             // Append winner info to the summary log
             summary.append("\n").append(winMsg);
 
-            sequencer.multicastAction(new GameMessage(
-                GameMessage.Type.SHOWDOWN, "Leader", myTcpPort, summary.toString()
+            context.sequencer.multicastAction(new GameMessage(
+                GameMessage.Type.SHOWDOWN, "Leader", context.myPort, summary.toString()
             ));
         }
         
@@ -371,7 +356,7 @@ public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManage
         // Wait 3 seconds so everyone can see the result before the server dies
         new Thread(() -> {
             try { Thread.sleep(3000); } catch (Exception e) {}
-            electionManager.passLeadership(); 
+            context.election.passLeadership(); 
         }).start();
         
         gameInProgress = false;
@@ -393,15 +378,15 @@ public TexasHoldem(int myPort, TcpMeshManager tcp, Sequencer seq, ElectionManage
     }
 
     private void broadcastState(String msg) {
-        sequencer.multicastAction(new GameMessage(
-            GameMessage.Type.GAME_STATE, "Leader", myTcpPort, msg
+        context.sequencer.multicastAction(new GameMessage(
+            GameMessage.Type.GAME_STATE, "Leader", context.myPort, msg
         ));
     }
     
     private void sendPrivateError(int targetId, String msg) {
         // Send a temporary "Game State" just to that person
-        tcpLayer.sendToPeer(targetId, new GameMessage(
-             GameMessage.Type.GAME_STATE, "Leader", myTcpPort, "ERROR: " + msg
+        context.tcp.sendToPeer(targetId, new GameMessage(
+             GameMessage.Type.GAME_STATE, "Leader", context.myPort, "ERROR: " + msg
         ));
     }
 }
