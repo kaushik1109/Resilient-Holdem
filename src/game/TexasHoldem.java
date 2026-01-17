@@ -1,108 +1,165 @@
 package game;
 
-import java.util.*;
 import networking.GameMessage;
+import java.io.*;
+import java.util.Base64;
 
 public class TexasHoldem {
-    
     private final NodeContext context;
-    
-    private Deck deck;
-    private List<Player> players = new ArrayList<>();
-    private List<Card> communityCards = new ArrayList<>();
-    
-    private int pot = 0;
-    private int currentHighestBet = 0;
-    private int currentPlayerIndex = 0;
+    private final PokerTable table; 
+
     private boolean gameInProgress = false;
     
+    // Move Phase enum to class level or separate file so PokerTable can see it
     public enum Phase { PREFLOP, FLOP, TURN, RIVER, SHOWDOWN }
-    private Phase currentPhase = Phase.PREFLOP;
-    private int playersActedThisPhase = 0;
 
     public TexasHoldem(NodeContext context) {
+        this(context, new PokerTable());
+    }
+
+public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         this.context = context;
-        this.deck = new Deck();
+        this.table = loadedTable;
         
-        // Sync Local Queue
-        this.context.queue.forceSync(context.sequencer.getCurrentSeqId());
-        System.out.println("[Game] Local Queue Synced to Leader Sequencer.");
+        // --- FIX 1: Roster Reconciliation ---
+        // 1. I am now the Dealer. I cannot play. Remove me from the table.
+        boolean removedSelf = table.players.removeIf(p -> p.id == context.myPort);
+        if (removedSelf) {
+            System.out.println("[Game] I (Node " + context.myPort + ") am now Dealer. Standing up from the table.");
+        }
+
+        // 2. Scan for missing peers (e.g., The Old Leader who just stepped down)
+        // They are connected via TCP, but might not be in the 'players' list yet.
+        System.out.println("[Game] reconciling player roster...");
+        for (int peerId : context.tcp.getConnectedPeerIds()) {
+            addPlayer(peerId); // This method handles duplicates safely
+        }
+
+        // 3. Sync State
+        this.gameInProgress = (table.currentPhase != Phase.PREFLOP || table.pot > 0);
+        context.queue.forceSync(context.sequencer.getCurrentSeqId());
+
+        // 4. Send SYNC to all active players
+        long currentSeq = context.sequencer.getCurrentSeqId();
+        for (Player p : table.players) {
+             context.tcp.sendToPeer(p.id, new GameMessage(
+                 GameMessage.Type.SYNC, "Leader", context.myPort, String.valueOf(currentSeq)
+             ));
+        }
     }
 
     public void addPlayer(int playerId) {
+        // 1. Leader Logic: The Dealer does NOT sit at the table.
         if (playerId == context.myPort) return;
-        if (players.stream().anyMatch(p -> p.id == playerId)) return;
+        
+        // 2. Duplicate Check
+        if (table.players.stream().anyMatch(p -> p.id == playerId)) return;
 
+        // 3. New Player Logic
         Player newPlayer = new Player(playerId, 1000);
         
-        // Whether game is running or not, the player needs to know 
-        // that the Sequence ID has reset to 0.
-        sendSyncPacket(playerId); 
-
+        // If they join mid-game (and weren't already in the table state), they spectate
         if (gameInProgress) {
-            newPlayer.isActive = false; 
-            newPlayer.folded = true;   
-            System.out.println("[Game] Spectator " + playerId + " joined mid-game.");
-            sendStateDump(playerId); // Only send Board/Pot if game is running
+            newPlayer.isActive = false;
+            newPlayer.folded = true;
+            sendStateDump(playerId);
         } else {
-            System.out.println("[Game] Player " + playerId + " joined (Waiting for start).");
+            // New players joining during the break are active for the next hand
+             System.out.println("[Game] Player " + playerId + " added to table.");
         }
         
-        players.add(newPlayer);
-    }
-    // Helper to just send the Sequence ID reset
-    private void sendSyncPacket(int targetId) {
+        // Send Sync so they are on the right Sequence ID
         long currentSeq = context.sequencer.getCurrentSeqId();
-        context.tcp.sendToPeer(targetId, new GameMessage(
+        context.tcp.sendToPeer(playerId, new GameMessage(
             GameMessage.Type.SYNC, "Leader", context.myPort, String.valueOf(currentSeq)
         ));
+
+        table.players.add(newPlayer);
     }
 
-    // Renamed old 'sendWelcomePackage' to 'sendStateDump' for clarity
+    public void startNewRound() {
+        // We need at least 2 players + 1 Dealer (Me) = 3 Nodes Total involved? 
+        // Or can 2 players play while 1 deals? Yes. 
+        if (table.players.size() < 2) {
+            System.out.println("[Game] Cannot start. Need at least 2 players (excluding Dealer). Current: " + table.players.size());
+            return;
+        }
+        
+        gameInProgress = true;
+        
+        // Reset State
+        table.deck = new Deck();
+        table.deck.shuffle();
+        table.communityCards.clear();
+        table.pot = 0;
+        table.currentHighestBet = 0;
+        table.currentPhase = Phase.PREFLOP;
+        table.playersActedThisPhase = 0;
+        
+        // 1. Rotate Button (Relative to the list of players)
+        table.dealerIndex = (table.dealerIndex + 1) % table.players.size();
+        
+        // 2. Set Turn (Player after Button)
+        table.currentPlayerIndex = (table.dealerIndex + 1) % table.players.size();
+
+        // Reset Players
+        for (Player p : table.players) p.resetForNewHand();
+
+        // Deal Cards (Only to Players in the list)
+        for (Player p : table.players) {
+            Card c1 = table.deck.deal();
+            Card c2 = table.deck.deal();
+            p.holeCards.add(c1);
+            p.holeCards.add(c2);
+            
+            context.tcp.sendToPeer(p.id, new GameMessage(
+                GameMessage.Type.YOUR_HAND, "Leader", context.myPort, c1 + "," + c2
+            ));
+        }
+        
+        broadcastState("New Round! Dealer Node is " + context.myPort + ". Button is Player " + table.players.get(table.dealerIndex).id);
+        notifyTurn();
+    }
+    
+    // Helper to send state to late joiners
     private void sendStateDump(int targetId) {
-        // Send Community Cards
-        if (!communityCards.isEmpty()) {
+        if (!table.communityCards.isEmpty()) {
             StringBuilder sb = new StringBuilder();
-            for (Card c : communityCards) sb.append(c.toString()).append(",");
+            for (Card c : table.communityCards) sb.append(c.toString()).append(",");
             context.tcp.sendToPeer(targetId, new GameMessage(
                 GameMessage.Type.COMMUNITY_CARDS, "Leader", context.myPort, sb.toString()
             ));
         }
-        // Send Pot/Status
-        String stateMsg = "Spectating... (Pot: " + pot + ")";
+        String stateMsg = "Spectating... (Pot: " + table.pot + ")";
         context.tcp.sendToPeer(targetId, new GameMessage(
-            GameMessage.Type.GAME_STATE, "Leader", context.myPort, stateMsg
+             GameMessage.Type.GAME_STATE, "Leader", context.myPort, stateMsg
         ));
     }
 
-    public void startNewRound() {
-        if (players.size() < 2) return;
-        
-        gameInProgress = true;
-        deck = new Deck();
-        deck.shuffle();
-        communityCards.clear();
-        pot = 0;
-        currentHighestBet = 0;
-        currentPlayerIndex = 0;
-        currentPhase = Phase.PREFLOP;
-        playersActedThisPhase = 0;
-        
-        // Reset players
-        for (Player p : players) p.resetForNewHand();
+    // Example of using the persistent index
+    private void notifyTurn() {
+        Player next = table.players.get(table.currentPlayerIndex); // <--- Uses Table State
+        broadcastState("Pot: " + table.pot + " | Turn: Player " + next.id);
+    }
 
-        // Deal Cards (Private TCP)
-        for (Player p : players) {
-            Card c1 = deck.deal();
-            Card c2 = deck.deal();
-            p.holeCards.add(c1);
-            p.holeCards.add(c2);
-            context.tcp.sendToPeer(p.id, new GameMessage(
-                GameMessage.Type.YOUR_HAND, "Leader", context.myPort, c1.toString() + "," + c2.toString()
-            ));
-        }
-        broadcastState("New Round! Pre-Flop Betting.");
-        notifyTurn();
+    // --- Helper: Serialize Table to String (for Migration) ---
+    public String getSerializedState() {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(baos);
+            oos.writeObject(table);
+            oos.close();
+            return Base64.getEncoder().encodeToString(baos.toByteArray());
+        } catch (IOException e) { return ""; }
+    }
+
+    // --- Helper: Deserialize String to Table ---
+    public static PokerTable deserializeState(String data) {
+        try {
+            byte[] bytes = Base64.getDecoder().decode(data);
+            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes));
+            return (PokerTable) ois.readObject();
+        } catch (Exception e) { return new PokerTable(); }
     }
 
     public void handleClientRequest(GameMessage msg) {
@@ -112,7 +169,7 @@ public class TexasHoldem {
             return;
         }
 
-        Player current = players.get(currentPlayerIndex);
+        Player current = table.players.get(table.currentPlayerIndex);
         
         // 2. Strict Turn Order Enforcement
         if (current.id != msg.tcpPort) {
@@ -136,7 +193,7 @@ public class TexasHoldem {
     public void processAction(int playerId, String command) {
         if (!gameInProgress) return;
 
-        Player current = players.get(currentPlayerIndex);
+        Player current = table.players.get(table.currentPlayerIndex);
         
         // 1. Enforce Turn Order
         if (current.id != playerId) {
@@ -157,7 +214,7 @@ public class TexasHoldem {
                     break;
 
                 case "call":
-                    int callAmt = currentHighestBet - current.currentBet;
+                    int callAmt = table.currentHighestBet - current.currentBet;
                     if (payChips(current, callAmt)) {
                         broadcastState("Player " + playerId + " Calls " + callAmt);
                         actionValid = true;
@@ -165,12 +222,12 @@ public class TexasHoldem {
                     break;
 
                 case "check":
-                    if (current.currentBet == currentHighestBet) {
+                    if (current.currentBet == table.currentHighestBet) {
                         broadcastState("Player " + playerId + " Checks.");
                         actionValid = true;
                     } else {
                         // Attempted check when they need to call
-                        sendPrivateError(playerId, "Cannot Check. You must Call " + (currentHighestBet - current.currentBet));
+                        sendPrivateError(playerId, "Cannot Check. You must Call " + (table.currentHighestBet - current.currentBet));
                     }
                     break;
 
@@ -187,12 +244,12 @@ public class TexasHoldem {
                     
                     if (payChips(current, amount)) {
                         int totalBet = current.currentBet; // Already updated by payChips
-                        if (totalBet > currentHighestBet) {
-                            currentHighestBet = totalBet;
+                        if (totalBet > table.currentHighestBet) {
+                            table.currentHighestBet = totalBet;
                             broadcastState("Player " + playerId + " Bets/Raises " + amount);
                             actionValid = true;
                         } else {
-                            sendPrivateError(playerId, "Bet too small. Must exceed " + currentHighestBet);
+                            sendPrivateError(playerId, "Bet too small. Must exceed " + table.currentHighestBet);
                         }
                     }
                     break;
@@ -200,7 +257,7 @@ public class TexasHoldem {
                 case "allin":
                      int allInAmt = current.chips;
                      payChips(current, allInAmt);
-                     if (current.currentBet > currentHighestBet) currentHighestBet = current.currentBet;
+                     if (current.currentBet > table.currentHighestBet) table.currentHighestBet = current.currentBet;
                      current.allIn = true;
                      broadcastState("Player " + playerId + " Goes ALL IN!");
                      actionValid = true;
@@ -222,27 +279,28 @@ public class TexasHoldem {
         }
         p.chips -= amount;
         p.currentBet += amount;
-        pot += amount;
+        table.pot += amount;
         return true;
     }
+
     private void moveToNextPlayer() {
         // 1. Check if everyone folded
-        long activeCount = players.stream().filter(p -> !p.folded).count();
+        long activeCount = table.players.stream().filter(p -> !p.folded).count();
         if (activeCount < 2) {
             endRoundByFold();
             return;
         }
 
         // 2. Increment "Acted" counter
-        playersActedThisPhase++;
+        table.playersActedThisPhase++;
 
         // 3. CHECK FOR PHASE END
         // Condition: Everyone active has acted AND everyone matches the highest bet
-        boolean allMatched = players.stream()
+        boolean allMatched = table.players.stream()
             .filter(p -> !p.folded && !p.allIn)
-            .allMatch(p -> p.currentBet == currentHighestBet);
+            .allMatch(p -> p.currentBet == table.currentHighestBet);
 
-        if (allMatched && playersActedThisPhase >= activeCount) {
+        if (allMatched && table.playersActedThisPhase >= activeCount) {
             advancePhase(); // <--- GO TO FLOP/TURN/RIVER
             return;
         }
@@ -250,43 +308,43 @@ public class TexasHoldem {
         // 4. If Phase continues, move to next player
         int loopSafety = 0;
         do {
-            currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
+            table.currentPlayerIndex = (table.currentPlayerIndex + 1) % table.players.size();
             loopSafety++;
-        } while (players.get(currentPlayerIndex).folded && loopSafety < players.size());
+        } while (table.players.get(table.currentPlayerIndex).folded && loopSafety < table.players.size());
 
         notifyTurn();
     }
 
     private void advancePhase() {
-        playersActedThisPhase = 0;
-        currentHighestBet = 0;
+        table.playersActedThisPhase = 0;
+        table.currentHighestBet = 0;
         // Reset "currentBet" for the new round so betting starts from 0 again
-        for (Player p : players) p.currentBet = 0;
+        for (Player p : table.players) p.currentBet = 0;
         
         // Move Dealer button (Simple: First active player acts first post-flop)
-        currentPlayerIndex = 0;
-        while (players.get(currentPlayerIndex).folded) {
-            currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
+        table.currentPlayerIndex = 0;
+        while (table.players.get(table.currentPlayerIndex).folded) {
+            table.currentPlayerIndex = (table.currentPlayerIndex + 1) % table.players.size();
         }
 
-        switch (currentPhase) {
+        switch (table.currentPhase) {
             case PREFLOP:
-                currentPhase = Phase.FLOP;
+                table.currentPhase = Phase.FLOP;
                 dealCommunity(3);
                 broadcastState("The FLOP is dealt!");
                 break;
             case FLOP:
-                currentPhase = Phase.TURN;
+                table.currentPhase = Phase.TURN;
                 dealCommunity(1);
                 broadcastState("The TURN is dealt!");
                 break;
             case TURN:
-                currentPhase = Phase.RIVER;
+                table.currentPhase = Phase.RIVER;
                 dealCommunity(1);
                 broadcastState("The RIVER is dealt!");
                 break;
             case RIVER:
-                currentPhase = Phase.SHOWDOWN;
+                table.currentPhase = Phase.SHOWDOWN;
                 performShowdown(); // <--- DETERMINE WINNER
                 return;
             default:
@@ -299,8 +357,8 @@ public class TexasHoldem {
     private void dealCommunity(int count) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < count; i++) {
-            Card c = deck.deal();
-            communityCards.add(c);
+            Card c = table.deck.deal();
+            table.communityCards.add(c);
             sb.append(c.toString()).append(",");
         }
         // Broadcast the specific cards so UI can update
@@ -315,15 +373,14 @@ public class TexasHoldem {
         Player winner = null;
         int bestScore = -1;
         
-        // FIX: Change 'winReason' from "Score 6000" to "Flush (Ace High)"
         String winHandDescription = ""; 
 
         StringBuilder summary = new StringBuilder("--- SHOWDOWN RESULTS ---\n");
 
-        for (Player p : players) {
+        for (Player p : table.players) {
             if (p.folded) continue;
             
-            int score = HandEvaluator.evaluate(p.holeCards, communityCards);
+            int score = HandEvaluator.evaluate(p.holeCards, table.communityCards);
             String handDesc = HandEvaluator.getHandDescription(score); // <--- USE NEW METHOD
             
             summary.append(p.name)
@@ -338,9 +395,9 @@ public class TexasHoldem {
         }
         
         if (winner != null) {
-            winner.chips += pot;
+            winner.chips += table.pot;
             
-            String winMsg = "WINNER: " + winner.name + " with " + winHandDescription + "! Pot: " + pot;
+            String winMsg = "WINNER: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot;
             broadcastState(winMsg);
             
             // Append winner info to the summary log
@@ -353,10 +410,12 @@ public class TexasHoldem {
         
         System.out.println("[Game] Hand finished. Rotating Dealer...");
         
-        // Wait 3 seconds so everyone can see the result before the server dies
+        String stateData = getSerializedState();
+        
         new Thread(() -> {
             try { Thread.sleep(3000); } catch (Exception e) {}
-            context.election.passLeadership(); 
+            context.election.passLeadership(stateData); 
+            context.destroyServerGame();
         }).start();
         
         gameInProgress = false;
@@ -364,17 +423,12 @@ public class TexasHoldem {
 
     private void endRoundByFold() {
         // Find the one person left
-        Player winner = players.stream().filter(p -> !p.folded).findFirst().orElse(null);
+        Player winner = table.players.stream().filter(p -> !p.folded).findFirst().orElse(null);
         if (winner != null) {
-            winner.chips += pot;
-            broadcastState("Round Over. Everyone folded. " + winner.name + " wins " + pot);
+            winner.chips += table.pot;
+            broadcastState("Round Over. Everyone folded. " + winner.name + " wins " + table.pot);
         }
         gameInProgress = false;
-    }
-
-    private void notifyTurn() {
-        Player next = players.get(currentPlayerIndex);
-        broadcastState("Pot: " + pot + " | Turn: Player " + next.id + " (To Call: " + (currentHighestBet - next.currentBet) + ")");
     }
 
     private void broadcastState(String msg) {

@@ -66,9 +66,24 @@ public class NodeContext {
             // --- 2. Consensus ---
             case ELECTION:
             case ELECTION_OK:
-            case COORDINATOR:
                 election.handleMessage(msg);
                 break;
+
+                case COORDINATOR:
+                    election.currentLeaderId = msg.tcpPort;
+                    
+                    if (msg.tcpPort == myPort && msg.payload.length() > 20) {
+                        System.out.println(">>> I HAVE BEEN CROWNED! Loading Game State...");
+                        
+                        PokerTable loadedTable = TexasHoldem.deserializeState(msg.payload);
+                        createServerGame(loadedTable);
+                        this.election.iAmLeader = true;
+                        
+                        System.out.println(">>> Game State Loaded. Type 'start' to begin next hand.");
+                    } else {
+                        election.handleMessage(msg);
+                    }
+                    break;
 
             // --- 3. Game Data ---
             case ORDERED_MULTICAST:
@@ -113,8 +128,28 @@ public class NodeContext {
         }
     }
 
+    public void onPeerConnected(int peerId) {
+        // If I am Leader, add them to the game immediately
+        if (election.iAmLeader && serverGame != null) {
+            serverGame.addPlayer(peerId);
+        }
+    }
+
     // --- Server Game Management ---
     public TexasHoldem getServerGame() { return serverGame; }
-    public void createServerGame() { this.serverGame = new TexasHoldem(this); }
+
+    public void createServerGame() {
+        this.serverGame = new TexasHoldem(this);
+        
+        System.out.println("[Context] Backfilling existing peers into the game...");
+        for (int peerId : tcp.getConnectedPeerIds()) {
+            this.serverGame.addPlayer(peerId);
+        }
+    }
+
+    // Overload for Rotation (Migration)
+    public void createServerGame(PokerTable loadedTable) {
+        this.serverGame = new TexasHoldem(this, loadedTable);
+    }
     public void destroyServerGame() { this.serverGame = null; }
 }

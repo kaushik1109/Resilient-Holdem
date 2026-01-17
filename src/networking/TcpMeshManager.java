@@ -64,6 +64,7 @@ public class TcpMeshManager {
                 if (peerId == -1) {
                     peerId = msg.tcpPort;
                     peers.put(peerId, new Peer(socket.getInetAddress().getHostAddress(), peerId, socket, out));
+                    context.onPeerConnected(peerId);
                 }
 
                 Peer p = peers.get(peerId);
@@ -148,7 +149,7 @@ public class TcpMeshManager {
             } catch (InterruptedException e) {}
         }
     }
-    
+
     // ElectionManager needs to ask: "Is the Leader dead?"
     public boolean isPeerAlive(int peerId) {
         return peers.containsKey(peerId);

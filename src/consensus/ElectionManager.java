@@ -37,31 +37,31 @@ public class ElectionManager {
         }).start();
     }
 
-    // --- NEW: Round Robin Logic ---
-    public void passLeadership() {
+    public void passLeadership(String serializedTablePayload) {
         if (!iAmLeader) return;
 
         // 1. Get all candidates (Peers + Me)
         List<Integer> allNodes = new ArrayList<>(connectionManager.getConnectedPeerIds());
         allNodes.add(myId);
-        Collections.sort(allNodes); // Order them: 5000, 5001, 5002
+        Collections.sort(allNodes);
 
-        // 2. Find My Index
+        // 2. Find Next Leader
         int myIndex = allNodes.indexOf(myId);
-        
-        // 3. Pick Next (Wrap around)
         int nextIndex = (myIndex + 1) % allNodes.size();
         int nextLeaderId = allNodes.get(nextIndex);
 
         System.out.println("[Election] Handing over leadership to Node " + nextLeaderId);
 
-        // 4. Resign Locally
+        // 3. Resign Locally
         iAmLeader = false;
         currentLeaderId = nextLeaderId;
 
-        // 5. Broadcast the Decree (This forces everyone to accept the new leader)
+        // 4. Broadcast Decree with DATA (Fix: Send the data, not just "Rotation")
         connectionManager.broadcastToAll(new GameMessage(
-            GameMessage.Type.COORDINATOR, "", nextLeaderId, "Rotation"
+            GameMessage.Type.COORDINATOR, 
+            "", 
+            nextLeaderId, 
+            serializedTablePayload // <--- PASS THE DATA
         ));
     }
 

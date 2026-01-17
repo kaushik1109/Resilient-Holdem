@@ -5,48 +5,18 @@ import java.util.Random;
 
 public class Main {
     public static void main(String[] args) {
-        // 1. Identity
         int myPort = 5000 + new Random().nextInt(1000);
-        System.out.println("--- Node Started (ID: " + myPort + ") ---");
-
-        // 2. Initialize System (Wiring happens inside here)
         NodeContext node = new NodeContext(myPort);
-        
-        // 3. Start System
         node.start();
 
-        // 4. Background Thread: Manage "Server" Role
         new Thread(() -> {
-            while (true) {
-                try {
-                    Thread.sleep(1000);
-                    // Update Queue with current Leader ID (for NACKs)
-                    node.queue.setLeaderId(node.election.currentLeaderId);
-
-                    // If I am Leader, ensure Server Logic exists
-                    if (node.election.iAmLeader) {
-                        if (node.getServerGame() == null) {
-                            System.out.println(">>> I AM THE DEALER <<<");
-                            node.createServerGame();
-                            
-                            // Auto-add existing peers
-                            for (int peerId : node.tcp.getConnectedPeerIds()) {
-                                node.getServerGame().addPlayer(peerId);
-                            }
-                        } else {
-                            // Check for new peers periodically
-                             for (int peerId : node.tcp.getConnectedPeerIds()) {
-                                node.getServerGame().addPlayer(peerId);
-                            }
-                        }
-                    } else {
-                        node.destroyServerGame();
-                    }
-                } catch (Exception e) {}
+            try { Thread.sleep(5000); } catch (Exception e) {}
+            if (node.election.iAmLeader && node.getServerGame() == null) {
+                System.out.println(">>> I AM THE GENESIS DEALER <<<");
+                node.createServerGame();
             }
         }).start();
 
-        // 5. COMMAND LOOP
         handleUserCommands(node);
     }
 
