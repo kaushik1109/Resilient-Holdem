@@ -27,13 +27,16 @@ public class ClientGameState {
         System.out.println(">>> GAME INFO: " + msg);
     }
     
-    public void printBoard() {
+    public void printStatus() {
+        System.out.println("\n--- CURRENT STATUS ---");
         if (myHand.isEmpty()) {
-            System.out.println(">>> MY HAND: [Spectating]");
+             System.out.println("HAND:  [Spectating / Folded]");
         } else {
-            System.out.println(">>> MY HAND: " + myHand);
+             System.out.println("HAND:  " + myHand);
         }
-        System.out.println(">>> BOARD: " + communityCards);
-        System.out.println(">>> INFO: " + status);
+        
+        System.out.println("BOARD: " + communityCards);
+        System.out.println("INFO:  " + status);
+        System.out.println("----------------------");
     }
 }

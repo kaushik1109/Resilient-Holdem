@@ -116,8 +116,7 @@ public class TcpMeshManager {
         if (peerId != -1 && peers.containsKey(peerId)) {
             Peer p = peers.remove(peerId);
             try { p.socket.close(); } catch (Exception e) {}
-            // Notify Election Manager via Router logic (or direct call if exposed)
-            context.election.handleNodeFailure(peerId);
+            context.onPeerDisconnected(peerId);
         }
     }
     

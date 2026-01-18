@@ -136,10 +136,14 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         ));
     }
 
-    // Example of using the persistent index
     private void notifyTurn() {
-        Player next = table.players.get(table.currentPlayerIndex); // <--- Uses Table State
-        broadcastState("Pot: " + table.pot + " | Turn: Player " + next.id);
+        Player next = table.players.get(table.currentPlayerIndex);
+        broadcastState("Pot: " + table.pot + " | Turn: Player " + next.id + " (To Call: " + (table.currentHighestBet - next.currentBet) + ")");
+
+        context.tcp.sendToPeer(next.id, new GameMessage(
+            GameMessage.Type.GAME_STATE, "Leader", context.myPort, 
+            "*** IT IS YOUR TURN! ***" 
+        ));
     }
 
     // --- Helper: Serialize Table to String (for Migration) ---
@@ -235,12 +239,6 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
                 case "raise":
                     if (parts.length < 2) break;
                     int amount = Integer.parseInt(parts[1]);
-                    // Logic: Bet must be at least the call amount + raise
-                    int totalToPutIn = amount; 
-                    
-                    // Simple logic: 'bet 50' means "make my total bet 50"
-                    // Or "add 50 to pot"? 
-                    // Let's use: "Add this amount to my current stake"
                     
                     if (payChips(current, amount)) {
                         int totalBet = current.currentBet; // Already updated by payChips
@@ -274,7 +272,8 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
 
     private boolean payChips(Player p, int amount) {
         if (p.chips < amount) {
-            sendPrivateError(p.id, "Not enough chips!");
+            // This message will appear in their console
+            sendPrivateError(p.id, "Not enough chips! You have " + p.chips + " but tried to bet " + amount + ". Use 'allin' if you want to bet everything.");
             return false;
         }
         p.chips -= amount;
@@ -284,33 +283,34 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
     }
 
     private void moveToNextPlayer() {
-        // 1. Check if everyone folded
         long activeCount = table.players.stream().filter(p -> !p.folded).count();
         if (activeCount < 2) {
             endRoundByFold();
             return;
         }
 
-        // 2. Increment "Acted" counter
         table.playersActedThisPhase++;
 
-        // 3. CHECK FOR PHASE END
-        // Condition: Everyone active has acted AND everyone matches the highest bet
         boolean allMatched = table.players.stream()
-            .filter(p -> !p.folded && !p.allIn)
+            .filter(p -> !p.folded && !p.allIn) // All-In players don't need to match chips (they matched what they could)
             .allMatch(p -> p.currentBet == table.currentHighestBet);
 
+        // Logic check: If everyone else is All-In/Folded except one guy, ensuring he doesn't bet against himself?
+        // For simplicity: If all active (non-all-in) players matched, we advance.
         if (allMatched && table.playersActedThisPhase >= activeCount) {
-            advancePhase(); // <--- GO TO FLOP/TURN/RIVER
+            advancePhase();
             return;
         }
 
-        // 4. If Phase continues, move to next player
         int loopSafety = 0;
         do {
             table.currentPlayerIndex = (table.currentPlayerIndex + 1) % table.players.size();
             loopSafety++;
-        } while (table.players.get(table.currentPlayerIndex).folded && loopSafety < table.players.size());
+        } while (
+            (table.players.get(table.currentPlayerIndex).folded || 
+             table.players.get(table.currentPlayerIndex).allIn)
+            && loopSafety < table.players.size()
+        );
 
         notifyTurn();
     }
@@ -318,14 +318,18 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
     private void advancePhase() {
         table.playersActedThisPhase = 0;
         table.currentHighestBet = 0;
-        // Reset "currentBet" for the new round so betting starts from 0 again
         for (Player p : table.players) p.currentBet = 0;
         
-        // Move Dealer button (Simple: First active player acts first post-flop)
         table.currentPlayerIndex = 0;
         while (table.players.get(table.currentPlayerIndex).folded) {
             table.currentPlayerIndex = (table.currentPlayerIndex + 1) % table.players.size();
         }
+
+        long canBetCount = table.players.stream()
+            .filter(p -> !p.folded && !p.allIn)
+            .count();
+            
+        boolean skipBetting = (canBetCount < 2);
 
         switch (table.currentPhase) {
             case PREFLOP:
@@ -345,13 +349,21 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
                 break;
             case RIVER:
                 table.currentPhase = Phase.SHOWDOWN;
-                performShowdown(); // <--- DETERMINE WINNER
+                performShowdown(); // Ends the hand
                 return;
-            default:
-                break;
+            default: break;
         }
         
-        notifyTurn();
+        if (skipBetting) {
+            broadcastState("All players All-In (or only one active). Running it out...");
+            
+            new Thread(() -> {
+                try { Thread.sleep(2000); } catch (Exception e) {}
+                advancePhase(); 
+            }).start();
+        } else {
+            notifyTurn();
+        }
     }
 
     private void dealCommunity(int count) {
@@ -419,6 +431,32 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         }).start();
         
         gameInProgress = false;
+    }
+
+    public void handlePlayerCrash(int playerId) {
+        Player p = table.players.stream()
+            .filter(player -> player.id == playerId)
+            .findFirst()
+            .orElse(null);
+
+        if (p == null) return; 
+
+        System.err.println("[Game] Handling crash for Player " + playerId);
+
+        p.isActive = false;
+        p.folded = true; 
+        
+        broadcastState("Player " + playerId + " disconnected and is Auto-Folded.");
+
+        if (table.players.indexOf(p) == table.currentPlayerIndex) {
+            System.err.println("[Game] Crashed player had the turn. Forcing fold...");
+            processAction(playerId, "fold");
+        }
+        
+        long activeCount = table.players.stream().filter(pl -> pl.isActive && !pl.folded).count();
+        if (activeCount < 2) {
+            endRoundByFold();
+        }
     }
 
     private void endRoundByFold() {

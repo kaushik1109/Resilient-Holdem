@@ -91,9 +91,14 @@ public class NodeContext {
             case GAME_STATE:
             case COMMUNITY_CARDS:
             case SHOWDOWN:
-                // Authoritative message -> Update Leader ID
-                election.currentLeaderId = msg.tcpPort; 
-                queue.addMessage(msg);
+                if (msg.sequenceNumber <= 0) {
+                    if (msg.type == GameMessage.Type.GAME_STATE) {
+                         clientGame.onReceiveState(msg.payload);
+                    }
+                } else {
+                    election.currentLeaderId = msg.tcpPort;
+                    queue.addMessage(msg);
+                }
                 break;
 
             case SYNC:
@@ -132,6 +137,18 @@ public class NodeContext {
         // If I am Leader, add them to the game immediately
         if (election.iAmLeader && serverGame != null) {
             serverGame.addPlayer(peerId);
+        }
+    }
+
+    public void onPeerDisconnected(int peerId) {
+        System.err.println("[Context] Peer " + peerId + " disconnected/crashed.");
+
+        if (election != null) {
+            election.handleNodeFailure(peerId);
+        }
+
+        if (election.iAmLeader && serverGame != null) {
+            serverGame.handlePlayerCrash(peerId);
         }
     }
 
