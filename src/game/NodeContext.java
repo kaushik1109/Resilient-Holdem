@@ -22,21 +22,18 @@ public class NodeContext {
     public NodeContext(int port) {
         this.myPort = port;
 
-        // 1. Create Components
         this.clientGame = new ClientGameState();
         this.queue = new HoldBackQueue();
         
-        // Pass 'this' so they can call routeMessage()
         this.tcp = new TcpMeshManager(port, this); 
         this.udp = new UdpMulticastManager(port, this);
         
         this.election = new ElectionManager(port, tcp);
         this.sequencer = new Sequencer(udp);
 
-        // 2. Wire Dependencies (Queue still needs these to function)
         queue.setTcpLayer(tcp);
         queue.setClientGame(clientGame);
-        queue.setCallback(this::handleQueueDelivery); // Centralized Callback
+        queue.setCallback(this::handleQueueDelivery);
         
         sequencer.setTcpLayer(tcp);
         sequencer.setLocalQueue(queue);
@@ -50,9 +47,7 @@ public class NodeContext {
 
     public void routeMessage(GameMessage msg) {
         switch (msg.type) {
-            // --- 1. Infrastructure ---
             case HEARTBEAT:
-                // No action needed! TCP layer already updated timestamp.
                 break;
 
             case LEAVE:
@@ -63,7 +58,6 @@ public class NodeContext {
                 sequencer.handleNack(msg, msg.tcpPort);
                 break;
 
-            // --- 2. Consensus ---
             case ELECTION:
             case ELECTION_OK:
                 election.handleMessage(msg);
@@ -73,7 +67,7 @@ public class NodeContext {
                     election.currentLeaderId = msg.tcpPort;
                     
                     if (msg.tcpPort == myPort && msg.payload.length() > 20) {
-                        System.out.println(">>> I HAVE BEEN CROWNED! Loading Game State...");
+                        System.out.println("[Context] Leadership passed to me");
                         
                         PokerTable loadedTable = TexasHoldem.deserializeState(msg.payload);
                         createServerGame(loadedTable);
@@ -85,7 +79,6 @@ public class NodeContext {
                     }
                     break;
 
-            // --- 3. Game Data ---
             case ORDERED_MULTICAST:
             case PLAYER_ACTION:
             case GAME_STATE:
@@ -106,12 +99,10 @@ public class NodeContext {
                 queue.forceSync(Long.parseLong(msg.payload));
                 break;
 
-            // --- 4. Direct Client Updates (TCP Unicast) ---
             case YOUR_HAND:
                 clientGame.onReceiveHand(msg.payload);
                 break;
-
-            // --- 5. Requests to Leader (If I am Leader) ---
+            
             case ACTION_REQUEST:
                 if (election.iAmLeader && serverGame != null) {
                     serverGame.handleClientRequest(msg);
@@ -119,22 +110,17 @@ public class NodeContext {
                 break;
 
             default:
-                System.out.println("Unknown Message Type: " + msg.type);
+                System.out.println("[Context] Unknown Message Type: " + msg.type);
         }
     }
 
-    // Callback for when HoldBackQueue releases a valid, ordered message
     private void handleQueueDelivery(GameMessage msg) {
-        // If I am Leader, feed it to the Game Engine
-        if (election.iAmLeader && serverGame != null) {
-            if (msg.type == GameMessage.Type.PLAYER_ACTION) {
-                serverGame.processAction(msg.tcpPort, msg.payload);
-            }
+        if (election.iAmLeader && serverGame != null && msg.type == GameMessage.Type.PLAYER_ACTION) {
+            serverGame.processAction(msg.tcpPort, msg.payload);
         }
     }
 
     public void onPeerConnected(int peerId) {
-        // If I am Leader, add them to the game immediately
         if (election.iAmLeader && serverGame != null) {
             serverGame.addPlayer(peerId);
         }
@@ -152,7 +138,6 @@ public class NodeContext {
         }
     }
 
-    // --- Server Game Management ---
     public TexasHoldem getServerGame() { return serverGame; }
 
     public void createServerGame() {
@@ -164,9 +149,9 @@ public class NodeContext {
         }
     }
 
-    // Overload for Rotation (Migration)
     public void createServerGame(PokerTable loadedTable) {
         this.serverGame = new TexasHoldem(this, loadedTable);
     }
+
     public void destroyServerGame() { this.serverGame = null; }
 }

@@ -25,7 +25,6 @@ public class Card implements Serializable {
         return rank + " of " + suit;
     }
     
-    // Short string for UI (e.g., "Ah" for Ace of Hearts)
     public String toShortString() {
         String r = (rank.value > 10 || rank.value == 1) ? rank.name().substring(0, 1) : String.valueOf(rank.value);
         return r + suit.name().substring(0, 1);

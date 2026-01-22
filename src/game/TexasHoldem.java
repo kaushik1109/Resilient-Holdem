@@ -10,36 +10,29 @@ public class TexasHoldem {
 
     private boolean gameInProgress = false;
     
-    // Move Phase enum to class level or separate file so PokerTable can see it
     public enum Phase { PREFLOP, FLOP, TURN, RIVER, SHOWDOWN }
 
     public TexasHoldem(NodeContext context) {
         this(context, new PokerTable());
     }
 
-public TexasHoldem(NodeContext context, PokerTable loadedTable) {
+    public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         this.context = context;
         this.table = loadedTable;
         
-        // --- FIX 1: Roster Reconciliation ---
-        // 1. I am now the Dealer. I cannot play. Remove me from the table.
         boolean removedSelf = table.players.removeIf(p -> p.id == context.myPort);
         if (removedSelf) {
-            System.out.println("[Game] I (Node " + context.myPort + ") am now Dealer. Standing up from the table.");
+            System.out.println("[Game] I (Node " + context.myPort + ") am now Dealer. Leaving the table.");
         }
 
-        // 2. Scan for missing peers (e.g., The Old Leader who just stepped down)
-        // They are connected via TCP, but might not be in the 'players' list yet.
         System.out.println("[Game] reconciling player roster...");
         for (int peerId : context.tcp.getConnectedPeerIds()) {
-            addPlayer(peerId); // This method handles duplicates safely
+            addPlayer(peerId);
         }
 
-        // 3. Sync State
         this.gameInProgress = (table.currentPhase != Phase.PREFLOP || table.pot > 0);
         context.queue.forceSync(context.sequencer.getCurrentSeqId());
 
-        // 4. Send SYNC to all active players
         long currentSeq = context.sequencer.getCurrentSeqId();
         for (Player p : table.players) {
              context.tcp.sendToPeer(p.id, new GameMessage(
@@ -49,26 +42,20 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
     }
 
     public void addPlayer(int playerId) {
-        // 1. Leader Logic: The Dealer does NOT sit at the table.
         if (playerId == context.myPort) return;
         
-        // 2. Duplicate Check
         if (table.players.stream().anyMatch(p -> p.id == playerId)) return;
 
-        // 3. New Player Logic
         Player newPlayer = new Player(playerId, 1000);
         
-        // If they join mid-game (and weren't already in the table state), they spectate
         if (gameInProgress) {
             newPlayer.isActive = false;
             newPlayer.folded = true;
             sendStateDump(playerId);
         } else {
-            // New players joining during the break are active for the next hand
-             System.out.println("[Game] Player " + playerId + " added to table.");
+            System.out.println("[Game] Player " + playerId + " added to table.");
         }
         
-        // Send Sync so they are on the right Sequence ID
         long currentSeq = context.sequencer.getCurrentSeqId();
         context.tcp.sendToPeer(playerId, new GameMessage(
             GameMessage.Type.SYNC, "Leader", context.myPort, String.valueOf(currentSeq)
@@ -78,8 +65,6 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
     }
 
     public void startNewRound() {
-        // We need at least 2 players + 1 Dealer (Me) = 3 Nodes Total involved? 
-        // Or can 2 players play while 1 deals? Yes. 
         if (table.players.size() < 2) {
             System.out.println("[Game] Cannot start. Need at least 2 players (excluding Dealer). Current: " + table.players.size());
             return;
@@ -87,7 +72,6 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         
         gameInProgress = true;
         
-        // Reset State
         table.deck = new Deck();
         table.deck.shuffle();
         table.communityCards.clear();
@@ -96,16 +80,13 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         table.currentPhase = Phase.PREFLOP;
         table.playersActedThisPhase = 0;
         
-        // 1. Rotate Button (Relative to the list of players)
-        table.dealerIndex = (table.dealerIndex + 1) % table.players.size();
+        // OP: I suspect this is causing the weird dealer issue
+        // table.dealerIndex = (table.dealerIndex + 1) % table.players.size();
         
-        // 2. Set Turn (Player after Button)
         table.currentPlayerIndex = (table.dealerIndex + 1) % table.players.size();
 
-        // Reset Players
         for (Player p : table.players) p.resetForNewHand();
 
-        // Deal Cards (Only to Players in the list)
         for (Player p : table.players) {
             Card c1 = table.deck.deal();
             Card c2 = table.deck.deal();
@@ -146,7 +127,6 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         ));
     }
 
-    // --- Helper: Serialize Table to String (for Migration) ---
     public String getSerializedState() {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -157,7 +137,6 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         } catch (IOException e) { return ""; }
     }
 
-    // --- Helper: Deserialize String to Table ---
     public static PokerTable deserializeState(String data) {
         try {
             byte[] bytes = Base64.getDecoder().decode(data);
@@ -167,7 +146,6 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
     }
 
     public void handleClientRequest(GameMessage msg) {
-        // 1. Basic Validation
         if (!gameInProgress) {
             sendPrivateError(msg.tcpPort, "Game not started.");
             return;
@@ -175,25 +153,15 @@ public TexasHoldem(NodeContext context, PokerTable loadedTable) {
 
         Player current = table.players.get(table.currentPlayerIndex);
         
-        // 2. Strict Turn Order Enforcement
         if (current.id != msg.tcpPort) {
             System.out.println("[Server] Rejecting out-of-turn move from " + msg.tcpPort);
             sendPrivateError(msg.tcpPort, "Not your turn! Current turn: " + current.id);
             return;
         }
 
-        // 3. Logic Validation (Can they actually bet this?)
-        // (Simplified check: just passing it through for now if turn is correct)
-        // In a full implementation, you'd check p.chips >= amount here too.
-
-        // 4. IF VALID: Multicast it to the world
-        // Only NOW does it become an "Official" game move
         context.sequencer.multicastAction(msg);
     }
 
-    /**
-     * The Brain: Processes "bet 20", "fold", "call"
-     */
     public void processAction(int playerId, String command) {
         if (!gameInProgress) return;
 

@@ -40,28 +40,24 @@ public class ElectionManager {
     public void passLeadership(String serializedTablePayload) {
         if (!iAmLeader) return;
 
-        // 1. Get all candidates (Peers + Me)
         List<Integer> allNodes = new ArrayList<>(connectionManager.getConnectedPeerIds());
         allNodes.add(myId);
         Collections.sort(allNodes);
 
-        // 2. Find Next Leader
         int myIndex = allNodes.indexOf(myId);
         int nextIndex = (myIndex + 1) % allNodes.size();
         int nextLeaderId = allNodes.get(nextIndex);
 
         System.out.println("[Election] Handing over leadership to Node " + nextLeaderId);
 
-        // 3. Resign Locally
         iAmLeader = false;
         currentLeaderId = nextLeaderId;
 
-        // 4. Broadcast Decree with DATA (Fix: Send the data, not just "Rotation")
         connectionManager.broadcastToAll(new GameMessage(
             GameMessage.Type.COORDINATOR, 
             "", 
             nextLeaderId, 
-            serializedTablePayload // <--- PASS THE DATA
+            serializedTablePayload
         ));
     }
 

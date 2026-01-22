@@ -5,7 +5,7 @@ import networking.TcpMeshManager;
 import game.ClientGameState;
 import java.util.PriorityQueue;
 import java.util.Comparator;
-import java.util.function.Consumer; // <--- STRICTLY IMPORT THIS
+import java.util.function.Consumer;
 
 public class HoldBackQueue {
     private PriorityQueue<GameMessage> queue = new PriorityQueue<>(
@@ -18,10 +18,8 @@ public class HoldBackQueue {
     private int leaderId = -1;
     private boolean isProcessing = false;
 
-    // 1. The Callback Field (The "Slot")
     private Consumer<GameMessage> onMessageReceived; 
 
-    // 2. The Setter (Plugging logic into the slot)
     public void setCallback(Consumer<GameMessage> callback) {
         this.onMessageReceived = callback;
     }
@@ -43,8 +41,8 @@ public class HoldBackQueue {
         processQueue();
     }
 
-private void processQueue() {
-        if (isProcessing) return; // FIX: Prevent recursive processing
+    private void processQueue() {
+        if (isProcessing) return; 
         isProcessing = true;
 
         try {
@@ -54,18 +52,16 @@ private void processQueue() {
                 if (head.sequenceNumber == nextExpectedSeq) {
                     queue.poll();
                     
-                    // Critical: Update sequence BEFORE delivering to app
-                    // This ensures if the app generates a NEW message (Seq+1),
-                    // we are ready for it.
+                    // Update sequence BEFORE delivering to app. This ensures if the app generates a NEW message (Seq+1), we are ready for it.
                     nextExpectedSeq++; 
                     
                     deliverToApp(head);
                 } 
                 else if (head.sequenceNumber < nextExpectedSeq) {
-                    queue.poll(); // Ignore duplicate
+                    // Ignore duplicate
+                    queue.poll();
                 } 
                 else {
-                    // Real Gap detected
                     sendNack(nextExpectedSeq);
                     break;
                 }
@@ -87,8 +83,7 @@ private void processQueue() {
 
     public synchronized void forceSync(long catchUpSeq) {
         // Jump the counter to what the Leader tells us
-        // We add 1 because the Leader sends the "Current" ID (e.g., 50), 
-        // so we want to be ready for the NEXT one (51).
+        // We add 1 because the Leader sends the "Current" ID (e.g., 50), so we want to be ready for the NEXT one (51).
         this.nextExpectedSeq = catchUpSeq + 1;
         
         // Clear any old junk we might have buffered while waiting
@@ -97,8 +92,7 @@ private void processQueue() {
         System.out.println("[Queue] Synced! Jumped to Sequence #" + nextExpectedSeq);
     }
 
-private void deliverToApp(GameMessage msg) {
-        // UI Updates
+    private void deliverToApp(GameMessage msg) {
         if (clientGame != null) {
             switch (msg.type) {
                 case COMMUNITY_CARDS: 
@@ -112,7 +106,6 @@ private void deliverToApp(GameMessage msg) {
             }
         }
 
-        // Always trigger logic callback
         if (onMessageReceived != null) {
             onMessageReceived.accept(msg);
         }

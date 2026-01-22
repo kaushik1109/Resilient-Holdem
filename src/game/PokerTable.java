@@ -12,8 +12,8 @@ public class PokerTable implements Serializable {
     public int pot = 0;
     public int currentHighestBet = 0;
     
-    public int dealerIndex = 0;      // Who has the Dealer Button
-    public int currentPlayerIndex = 0; // Whose actual turn it is
+    public int dealerIndex = 0; 
+    public int currentPlayerIndex = 0; 
     
     public TexasHoldem.Phase currentPhase = TexasHoldem.Phase.PREFLOP;
     public int playersActedThisPhase = 0;

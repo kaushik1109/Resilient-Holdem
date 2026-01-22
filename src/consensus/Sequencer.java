@@ -10,10 +10,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Sequencer {
     private UdpMulticastManager udpLayer;
     
-    // Global Sequence Counter (Only meaningful if I am Leader)
     private AtomicLong globalSequenceId = new AtomicLong(0);
     
-    // History Buffer for re-transmissions (Phase 4 requirement)
     private ConcurrentHashMap<Long, GameMessage> historyBuffer = new ConcurrentHashMap<>();
 
     private HoldBackQueue localQueue; 
@@ -31,7 +29,7 @@ public class Sequencer {
     public void setTcpLayer(TcpMeshManager tcp) {
         this.tcpLayer = tcp;
     }
-    
+
     public long getCurrentSeqId() {
         return globalSequenceId.get();
     }
@@ -39,15 +37,13 @@ public class Sequencer {
     public void multicastAction(GameMessage originalRequest) {
         long seqId = globalSequenceId.incrementAndGet();
 
-        // FIX 1: Preserve the Original Type (don't force ORDERED_MULTICAST)
-        // We only change it if it was a raw ACTION_REQUEST
         GameMessage.Type typeToSend = originalRequest.type;
         if (typeToSend == GameMessage.Type.ACTION_REQUEST) {
             typeToSend = GameMessage.Type.PLAYER_ACTION;
         }
 
         GameMessage orderedMsg = new GameMessage(
-            typeToSend, // Use the smart type
+            typeToSend,
             originalRequest.senderAddress,
             originalRequest.tcpPort,
             originalRequest.payload,
@@ -57,8 +53,6 @@ public class Sequencer {
         historyBuffer.put(seqId, orderedMsg);
         System.out.println("[Sequencer] Broadcasting #" + seqId + " (" + typeToSend + "): " + originalRequest.payload);
 
-        // FIX 2: Network FIRST, Local SECOND
-        // This prevents "Nested Multicast" where inner messages go out before outer ones
         udpLayer.sendMulticast(orderedMsg); 
         
         if (localQueue != null) {
@@ -75,7 +69,6 @@ public class Sequencer {
                 
                 System.out.println("[Sequencer] TCP Repair: Resending #" + missingSeq + " to Node " + requestorId);
                 
-                // USE TCP UNICAST instead of UDP Multicast for a retransmission
                 tcpLayer.sendToPeer(requestorId, oldMsg);
                 
             } else {

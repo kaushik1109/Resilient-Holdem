@@ -8,7 +8,6 @@ public class ClientGameState {
     public String status = "Waiting for game...";
     
     public void onReceiveHand(String payload) {
-        // Payload: "Ace of Spades,King of Hearts"
         String[] cards = payload.split(",");
         myHand.clear();
         Collections.addAll(myHand, cards);
@@ -28,15 +27,14 @@ public class ClientGameState {
     }
     
     public void printStatus() {
-        System.out.println("\n--- CURRENT STATUS ---");
+        System.out.println("\n>>> CURRENT STATUS");
         if (myHand.isEmpty()) {
-             System.out.println("HAND:  [Spectating / Folded]");
+             System.out.println(">>> HAND:  [Spectating / Folded]");
         } else {
-             System.out.println("HAND:  " + myHand);
+             System.out.println(">>> HAND:  " + myHand);
         }
         
-        System.out.println("BOARD: " + communityCards);
-        System.out.println("INFO:  " + status);
-        System.out.println("----------------------");
+        System.out.println(">>> BOARD: " + communityCards);
+        System.out.println(">>> INFO:  " + status);
     }
 }
