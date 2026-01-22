@@ -46,7 +46,8 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
                 if (msg.tcpPort == myTcpPort && msg.sequenceNumber <= 0) continue;
 
                 if (msg.type == GameMessage.Type.JOIN_REQUEST) {
-                    context.tcp.connectToPeer(msg.senderAddress, msg.tcpPort);
+                    String realIp = packet.getAddress().getHostAddress();
+                    context.tcp.connectToPeer(realIp, msg.tcpPort);
                 } 
                 
                 else {
