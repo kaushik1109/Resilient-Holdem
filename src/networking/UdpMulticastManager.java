@@ -42,6 +42,9 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
 
                 ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(packet.getData()));
                 GameMessage msg = (GameMessage) ois.readObject();
+                
+                String senderIp = packet.getAddress().getHostAddress();
+                System.out.println("[UDP DEBUG] Received packet from " + senderIp + ":" + msg.tcpPort + " | Type: " + msg.type);
 
                 if (msg.tcpPort == myTcpPort && msg.sequenceNumber <= 0) continue;
 
@@ -82,36 +85,48 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
 
     private NetworkInterface findValidNetworkInterface() throws SocketException {
         Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
+        NetworkInterface bestCandidate = null;
+
         for (NetworkInterface netIf : java.util.Collections.list(nets)) {
-            // 1. Must be Up
+            // 1. Basic Checks
             if (!netIf.isUp()) continue;
-            
-            // 2. Must support Multicast
             if (!netIf.supportsMulticast()) continue;
-            
-            // 3. Ignore Loopback (127.0.0.1) unless you are offline
             if (netIf.isLoopback()) continue;
 
-            // 4. MAC SPECIFIC: Ignore "utun" (VPN) and "awdl" (AirDrop) interfaces
-            // These often cause the "Can't assign requested address" error
-            String name = netIf.getName();
-            if (name.startsWith("utun") || name.startsWith("awdl") || name.startsWith("llw")) {
-                continue;
-            }
+            String name = netIf.getName().toLowerCase();
+            String displayName = netIf.getDisplayName().toLowerCase();
 
-            // 5. Must have an IPv4 address
+            // 2. CRITICAL FIX: Explicitly Ban Virtual/VPN Adapters
+            if (displayName.contains("vmware") || name.contains("vmnet")) continue;
+            if (displayName.contains("virtual") || name.contains("vbox")) continue;
+            if (displayName.contains("pseudo") || name.contains("tunnel")) continue;
+            if (displayName.contains("wsl") || displayName.contains("hyper-v")) continue;
+
+            // 3. Must have an IPv4 address
             boolean hasIpv4 = netIf.getInterfaceAddresses().stream()
                 .anyMatch(addr -> addr.getAddress() instanceof Inet4Address);
-                
-            if (hasIpv4) {
-                System.out.println("[UDP] Binding to interface: " + netIf.getName() + " (" + netIf.getDisplayName() + ")");
+            
+            if (!hasIpv4) continue;
+
+            // 4. Preference Logic: "Wi-Fi" is gold standard on Windows
+            if (displayName.contains("wi-fi") || displayName.contains("wlan") || name.startsWith("en")) {
+                System.out.println("[UDP] Selected High-Priority Interface: " + displayName);
                 return netIf;
+            }
+            
+            // Keep as backup if we don't find a "Wi-Fi" named one
+            if (bestCandidate == null) {
+                bestCandidate = netIf;
             }
         }
         
-        // Fallback: If no real interface found, use loopback (local testing only)
+        if (bestCandidate != null) {
+             System.out.println("[UDP] Selected Backup Interface: " + bestCandidate.getDisplayName());
+             return bestCandidate;
+        }
+        
         System.out.println("[UDP] No valid WiFi/Ethernet found. Falling back to Loopback.");
-        return NetworkInterface.getByName("lo0"); // 'lo0' is standard loopback on Mac
+        return NetworkInterface.getByName("127.0.0.1");
     }
 
     /**
