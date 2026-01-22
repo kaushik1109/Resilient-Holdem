@@ -11,7 +11,7 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
     private static final int MULTICAST_PORT = 8888;
     
     private final int myTcpPort;
-    private final NodeContext context; // Reference to Router
+    private final NodeContext context;
     private boolean running = true;
 
     public UdpMulticastManager(int tcpPort, NodeContext context) {
@@ -44,13 +44,12 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
                 GameMessage msg = (GameMessage) ois.readObject();
                 
                 String senderIp = packet.getAddress().getHostAddress();
-                System.out.println("[UDP DEBUG] Received packet from " + senderIp + ":" + msg.tcpPort + " | Type: " + msg.type);
+                //System.out.println("[UDP DEBUG] Received packet from " + senderIp + ":" + msg.tcpPort + " | Type: " + msg.type);
 
                 if (msg.tcpPort == myTcpPort && msg.sequenceNumber <= 0) continue;
 
                 if (msg.type == GameMessage.Type.JOIN_REQUEST) {
-                    String realIp = packet.getAddress().getHostAddress();
-                    context.tcp.connectToPeer(realIp, msg.tcpPort);
+                    context.tcp.connectToPeer(senderIp, msg.tcpPort);
                 } 
                 
                 else {
@@ -96,25 +95,20 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
             String name = netIf.getName().toLowerCase();
             String displayName = netIf.getDisplayName().toLowerCase();
 
-            // 2. CRITICAL FIX: Explicitly Ban Virtual/VPN Adapters
             if (displayName.contains("vmware") || name.contains("vmnet")) continue;
             if (displayName.contains("virtual") || name.contains("vbox")) continue;
             if (displayName.contains("pseudo") || name.contains("tunnel")) continue;
             if (displayName.contains("wsl") || displayName.contains("hyper-v")) continue;
 
-            // 3. Must have an IPv4 address
-            boolean hasIpv4 = netIf.getInterfaceAddresses().stream()
-                .anyMatch(addr -> addr.getAddress() instanceof Inet4Address);
+            boolean hasIpv4 = netIf.getInterfaceAddresses().stream().anyMatch(addr -> addr.getAddress() instanceof Inet4Address);
             
             if (!hasIpv4) continue;
 
-            // 4. Preference Logic: "Wi-Fi" is gold standard on Windows
             if (displayName.contains("wi-fi") || displayName.contains("wlan") || name.startsWith("en")) {
                 System.out.println("[UDP] Selected High-Priority Interface: " + displayName);
                 return netIf;
             }
             
-            // Keep as backup if we don't find a "Wi-Fi" named one
             if (bestCandidate == null) {
                 bestCandidate = netIf;
             }

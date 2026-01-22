@@ -149,12 +149,10 @@ public class TcpMeshManager {
         }
     }
 
-    // ElectionManager needs to ask: "Is the Leader dead?"
     public boolean isPeerAlive(int peerId) {
         return peers.containsKey(peerId);
     }
     
-    // OR allow ElectionManager to read the timestamp directly if you prefer strict timeouts
     public long getPeerLastSeen(int peerId) {
         Peer p = peers.get(peerId);
         return (p != null) ? p.lastSeenTimestamp : 0;
