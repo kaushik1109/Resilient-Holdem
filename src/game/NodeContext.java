@@ -63,21 +63,21 @@ public class NodeContext {
                 election.handleMessage(msg);
                 break;
 
-                case COORDINATOR:
-                    election.currentLeaderId = msg.tcpPort;
+            case COORDINATOR:
+                election.currentLeaderId = msg.tcpPort;
+                
+                if (msg.tcpPort == myPort) {
+                    System.out.println("[Context] Leadership passed to me");
                     
-                    if (msg.tcpPort == myPort && msg.payload.length() > 20) {
-                        System.out.println("[Context] Leadership passed to me");
-                        
-                        PokerTable loadedTable = TexasHoldem.deserializeState(msg.payload);
-                        createServerGame(loadedTable);
-                        this.election.iAmLeader = true;
-                        
-                        System.out.println(">>> Game State Loaded. Type 'start' to begin next hand.");
-                    } else {
-                        election.handleMessage(msg);
-                    }
-                    break;
+                    PokerTable loadedTable = TexasHoldem.deserializeState(msg.payload);
+                    createServerGame(loadedTable);
+                    this.election.iAmLeader = true;
+                    
+                    System.out.println(">>> Game State Loaded. Type 'start' to begin next hand.");
+                } else {
+                    election.handleMessage(msg);
+                }
+                break;
 
             case ORDERED_MULTICAST:
             case PLAYER_ACTION:
@@ -89,13 +89,11 @@ public class NodeContext {
                          clientGame.onReceiveState(msg.payload);
                     }
                 } else {
-                    election.currentLeaderId = msg.tcpPort;
                     queue.addMessage(msg);
                 }
                 break;
 
             case SYNC:
-                election.currentLeaderId = msg.tcpPort;
                 queue.forceSync(Long.parseLong(msg.payload));
                 break;
 

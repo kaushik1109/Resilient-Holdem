@@ -29,9 +29,9 @@ public class ClientGameState {
     public void printStatus() {
         System.out.println("\n>>> CURRENT STATUS");
         if (myHand.isEmpty()) {
-             System.out.println(">>> HAND:  [Spectating / Folded]");
+             System.out.println(">>> HAND: [Spectating / Folded]");
         } else {
-             System.out.println(">>> HAND:  " + myHand);
+             System.out.println(">>> HAND: " + myHand);
         }
         
         System.out.println(">>> BOARD: " + communityCards);

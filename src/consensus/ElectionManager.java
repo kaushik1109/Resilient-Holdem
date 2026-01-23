@@ -61,7 +61,6 @@ public class ElectionManager {
         ));
     }
 
-    // --- Existing Bully Algorithm (For Crashes) ---
     public synchronized void startElection(String reason) {
         if (iAmLeader || electionInProgress) return;
         
@@ -71,7 +70,6 @@ public class ElectionManager {
 
         boolean sentChallenge = false;
         
-        // Standard Bully: Only challenge higher IDs
         for (int peerId : connectionManager.getConnectedPeerIds()) {
             if (peerId > myId) {
                 connectionManager.sendToPeer(peerId, new GameMessage(
@@ -86,7 +84,6 @@ public class ElectionManager {
             return;
         }
 
-        // Timeout waiting for "Stop" from higher nodes
         new Thread(() -> {
             try {
                 Thread.sleep(2000); 
@@ -110,7 +107,6 @@ public class ElectionManager {
     public void handleMessage(GameMessage msg) {
         switch (msg.type) {
             case ELECTION:
-                // Only respond if we have a higher ID
                 if (msg.tcpPort < myId) {
                     connectionManager.sendToPeer(msg.tcpPort, new GameMessage(
                         GameMessage.Type.ELECTION_OK, "", myId, "Stop"
@@ -124,7 +120,6 @@ public class ElectionManager {
                 break;
 
             case COORDINATOR:
-                // ACCEPT THE NEW RULER (Whether from Election or Rotation)
                 currentLeaderId = msg.tcpPort;
                 iAmLeader = (currentLeaderId == myId);
                 electionInProgress = false;
@@ -139,7 +134,7 @@ public class ElectionManager {
         System.out.println("[Election] Detected failure of Node " + deadNodeId);
         
         if (deadNodeId == currentLeaderId) {
-            System.err.println(">>> THE LEADER HAS DIED! STARTING RECOVERY! <<<");
+            System.err.println("[Election] The leader has crashed, starting election again");
             new Thread(() -> {
                 try { Thread.sleep(500); } catch(Exception e){}
                 startElection("Leader Crash");

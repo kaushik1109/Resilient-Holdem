@@ -98,7 +98,8 @@ public class HoldBackQueue {
                 case COMMUNITY_CARDS: 
                     clientGame.onReceiveCommunity(msg.payload); 
                     break;
-                case GAME_STATE:      
+                case GAME_STATE:
+                case SHOWDOWN:
                     clientGame.onReceiveState(msg.payload); 
                     break;
                 default:

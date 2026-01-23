@@ -11,7 +11,7 @@ public class TcpMeshManager {
     private static final int TIMEOUT_THRESHOLD = 6000;
 
     private final int myPort;
-    private final NodeContext context; // Reference to the Router
+    private final NodeContext context; 
     private ServerSocket serverSocket;
     private boolean running = true;
     

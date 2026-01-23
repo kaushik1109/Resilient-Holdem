@@ -25,19 +25,17 @@ public class TexasHoldem {
             System.out.println("[Game] I (Node " + context.myPort + ") am now Dealer. Leaving the table.");
         }
 
-        System.out.println("[Game] reconciling player roster...");
+        System.out.println("[Game] Reconciling player roster");
         for (int peerId : context.tcp.getConnectedPeerIds()) {
             addPlayer(peerId);
         }
 
-        this.gameInProgress = (table.currentPhase != Phase.PREFLOP || table.pot > 0);
+        this.gameInProgress = true;
         context.queue.forceSync(context.sequencer.getCurrentSeqId());
 
         long currentSeq = context.sequencer.getCurrentSeqId();
         for (Player p : table.players) {
-             context.tcp.sendToPeer(p.id, new GameMessage(
-                 GameMessage.Type.SYNC, "Leader", context.myPort, String.valueOf(currentSeq)
-             ));
+            sendPrivateMessage(GameMessage.Type.SYNC, p.id, String.valueOf(currentSeq));
         }
     }
 
@@ -57,9 +55,7 @@ public class TexasHoldem {
         }
         
         long currentSeq = context.sequencer.getCurrentSeqId();
-        context.tcp.sendToPeer(playerId, new GameMessage(
-            GameMessage.Type.SYNC, "Leader", context.myPort, String.valueOf(currentSeq)
-        ));
+        sendPrivateMessage(GameMessage.Type.SYNC, playerId, String.valueOf(currentSeq));
 
         table.players.add(newPlayer);
     }
@@ -107,47 +103,21 @@ public class TexasHoldem {
         if (!table.communityCards.isEmpty()) {
             StringBuilder sb = new StringBuilder();
             for (Card c : table.communityCards) sb.append(c.toString()).append(",");
-            context.tcp.sendToPeer(targetId, new GameMessage(
-                GameMessage.Type.COMMUNITY_CARDS, "Leader", context.myPort, sb.toString()
-            ));
+            sendPrivateMessage(GameMessage.Type.COMMUNITY_CARDS, targetId, sb.toString());
         }
-        String stateMsg = "Spectating... (Pot: " + table.pot + ")";
-        context.tcp.sendToPeer(targetId, new GameMessage(
-             GameMessage.Type.GAME_STATE, "Leader", context.myPort, stateMsg
-        ));
+
+        sendPrivateState(targetId, "Spectating... (Pot: " + table.pot + ")");
     }
 
     private void notifyTurn() {
         Player next = table.players.get(table.currentPlayerIndex);
         broadcastState("Pot: " + table.pot + " | Turn: Player " + next.id + " (To Call: " + (table.currentHighestBet - next.currentBet) + ")");
-
-        context.tcp.sendToPeer(next.id, new GameMessage(
-            GameMessage.Type.GAME_STATE, "Leader", context.myPort, 
-            "*** IT IS YOUR TURN! ***" 
-        ));
-    }
-
-    public String getSerializedState() {
-        try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ObjectOutputStream oos = new ObjectOutputStream(baos);
-            oos.writeObject(table);
-            oos.close();
-            return Base64.getEncoder().encodeToString(baos.toByteArray());
-        } catch (IOException e) { return ""; }
-    }
-
-    public static PokerTable deserializeState(String data) {
-        try {
-            byte[] bytes = Base64.getDecoder().decode(data);
-            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes));
-            return (PokerTable) ois.readObject();
-        } catch (Exception e) { return new PokerTable(); }
+        sendPrivateState(next.id, "It is your turn!");
     }
 
     public void handleClientRequest(GameMessage msg) {
         if (!gameInProgress) {
-            sendPrivateError(msg.tcpPort, "Game not started.");
+            sendPrivateState(msg.tcpPort, "Game not started.");
             return;
         }
 
@@ -155,7 +125,7 @@ public class TexasHoldem {
         
         if (current.id != msg.tcpPort) {
             System.out.println("[Server] Rejecting out-of-turn move from " + msg.tcpPort);
-            sendPrivateError(msg.tcpPort, "Not your turn! Current turn: " + current.id);
+            sendPrivateState(msg.tcpPort, "Not your turn! Current turn: " + current.id);
             return;
         }
 
@@ -167,7 +137,6 @@ public class TexasHoldem {
 
         Player current = table.players.get(table.currentPlayerIndex);
         
-        // 1. Enforce Turn Order
         if (current.id != playerId) {
             System.out.println("[Server] Ignored action from " + playerId + " (Not their turn)");
             return;
@@ -198,8 +167,7 @@ public class TexasHoldem {
                         broadcastState("Player " + playerId + " Checks.");
                         actionValid = true;
                     } else {
-                        // Attempted check when they need to call
-                        sendPrivateError(playerId, "Cannot Check. You must Call " + (table.currentHighestBet - current.currentBet));
+                        sendPrivateState(playerId, "Cannot Check. You must Call " + (table.currentHighestBet - current.currentBet));
                     }
                     break;
 
@@ -209,13 +177,13 @@ public class TexasHoldem {
                     int amount = Integer.parseInt(parts[1]);
                     
                     if (payChips(current, amount)) {
-                        int totalBet = current.currentBet; // Already updated by payChips
+                        int totalBet = current.currentBet; 
                         if (totalBet > table.currentHighestBet) {
                             table.currentHighestBet = totalBet;
                             broadcastState("Player " + playerId + " Bets/Raises " + amount);
                             actionValid = true;
                         } else {
-                            sendPrivateError(playerId, "Bet too small. Must exceed " + table.currentHighestBet);
+                            sendPrivateState(playerId, "Bet too small. Must exceed " + table.currentHighestBet);
                         }
                     }
                     break;
@@ -225,7 +193,7 @@ public class TexasHoldem {
                      payChips(current, allInAmt);
                      if (current.currentBet > table.currentHighestBet) table.currentHighestBet = current.currentBet;
                      current.allIn = true;
-                     broadcastState("Player " + playerId + " Goes ALL IN!");
+                     broadcastState("Player " + playerId + " Goes all in!");
                      actionValid = true;
                      break;
             }
@@ -240,10 +208,10 @@ public class TexasHoldem {
 
     private boolean payChips(Player p, int amount) {
         if (p.chips < amount) {
-            // This message will appear in their console
-            sendPrivateError(p.id, "Not enough chips! You have " + p.chips + " but tried to bet " + amount + ". Use 'allin' if you want to bet everything.");
+            sendPrivateState(p.id, "Not enough chips! You have " + p.chips + " but tried to bet " + amount + ". Use 'allin' if you want to bet everything.");
             return false;
         }
+
         p.chips -= amount;
         p.currentBet += amount;
         table.pot += amount;
@@ -260,7 +228,7 @@ public class TexasHoldem {
         table.playersActedThisPhase++;
 
         boolean allMatched = table.players.stream()
-            .filter(p -> !p.folded && !p.allIn) // All-In players don't need to match chips (they matched what they could)
+            .filter(p -> !p.folded && !p.allIn)
             .allMatch(p -> p.currentBet == table.currentHighestBet);
 
         // Logic check: If everyone else is All-In/Folded except one guy, ensuring he doesn't bet against himself?
@@ -317,7 +285,7 @@ public class TexasHoldem {
                 break;
             case RIVER:
                 table.currentPhase = Phase.SHOWDOWN;
-                performShowdown(); // Ends the hand
+                performShowdown();
                 return;
             default: break;
         }
@@ -341,27 +309,27 @@ public class TexasHoldem {
             table.communityCards.add(c);
             sb.append(c.toString()).append(",");
         }
-        // Broadcast the specific cards so UI can update
+        
         context.sequencer.multicastAction(new GameMessage(
             GameMessage.Type.COMMUNITY_CARDS, "Leader", context.myPort, sb.toString()
         ));
     }
 
     private void performShowdown() {
-        System.out.println("[Game] --- SHOWDOWN ---");
+        System.out.println(">>> SHOWDOWN");
         
         Player winner = null;
         int bestScore = -1;
         
         String winHandDescription = ""; 
 
-        StringBuilder summary = new StringBuilder("--- SHOWDOWN RESULTS ---\n");
+        StringBuilder summary = new StringBuilder(">>> SHOWDOWN RESULTS\n");
 
         for (Player p : table.players) {
             if (p.folded) continue;
             
             int score = HandEvaluator.evaluate(p.holeCards, table.communityCards);
-            String handDesc = HandEvaluator.getHandDescription(score); // <--- USE NEW METHOD
+            String handDesc = HandEvaluator.getHandDescription(score);
             
             summary.append(p.name)
                    .append(" shows: ").append(p.holeCards)
@@ -380,7 +348,6 @@ public class TexasHoldem {
             String winMsg = "WINNER: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot;
             broadcastState(winMsg);
             
-            // Append winner info to the summary log
             summary.append("\n").append(winMsg);
 
             context.sequencer.multicastAction(new GameMessage(
@@ -388,17 +355,7 @@ public class TexasHoldem {
             ));
         }
         
-        System.out.println("[Game] Hand finished. Rotating Dealer...");
-        
-        String stateData = getSerializedState();
-        
-        new Thread(() -> {
-            try { Thread.sleep(3000); } catch (Exception e) {}
-            context.election.passLeadership(stateData); 
-            context.destroyServerGame();
-        }).start();
-        
-        gameInProgress = false;
+        passLeadership();
     }
 
     public void handlePlayerCrash(int playerId) {
@@ -428,13 +385,52 @@ public class TexasHoldem {
     }
 
     private void endRoundByFold() {
-        // Find the one person left
         Player winner = table.players.stream().filter(p -> !p.folded).findFirst().orElse(null);
+
         if (winner != null) {
             winner.chips += table.pot;
-            broadcastState("Round Over. Everyone folded. " + winner.name + " wins " + table.pot);
+            
+            String winMsg = "Round Over. Everyone folded. " + winner.name + " wins " + table.pot;
+            broadcastState(winMsg);
+
+            context.sequencer.multicastAction(new GameMessage(
+                GameMessage.Type.SHOWDOWN, "Leader", context.myPort, winMsg
+            ));
         }
+
+        passLeadership();
+    }
+
+    private void passLeadership() {
+        System.out.println("[Game] Hand finished. Rotating Dealer...");
+        
+        String stateData = getSerializedState();
+        
+        new Thread(() -> {
+            try { Thread.sleep(3000); } catch (Exception e) {}
+            context.election.passLeadership(stateData); 
+            context.destroyServerGame();
+        }).start();
+        
         gameInProgress = false;
+    }
+
+    private String getSerializedState() {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(baos);
+            oos.writeObject(table);
+            oos.close();
+            return Base64.getEncoder().encodeToString(baos.toByteArray());
+        } catch (IOException e) { return ""; }
+    }
+
+    public static PokerTable deserializeState(String data) {
+        try {
+            byte[] bytes = Base64.getDecoder().decode(data);
+            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes));
+            return (PokerTable) ois.readObject();
+        } catch (Exception e) { return new PokerTable(); }
     }
 
     private void broadcastState(String msg) {
@@ -443,10 +439,11 @@ public class TexasHoldem {
         ));
     }
     
-    private void sendPrivateError(int targetId, String msg) {
-        // Send a temporary "Game State" just to that person
-        context.tcp.sendToPeer(targetId, new GameMessage(
-             GameMessage.Type.GAME_STATE, "Leader", context.myPort, "ERROR: " + msg
-        ));
+    private void sendPrivateState(int targetId, String msg) {
+        sendPrivateMessage(GameMessage.Type.GAME_STATE, targetId, msg);
+    }
+    
+    private void sendPrivateMessage(GameMessage.Type type, int targetId, String msg) {
+        context.tcp.sendToPeer(targetId, new GameMessage(type, "Leader", context.myPort, msg));
     }
 }
