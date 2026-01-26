@@ -4,6 +4,8 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
+import game.TexasHoldem.Phase;
+
 public class PokerTable implements Serializable {
     public List<Player> players = new ArrayList<>();
     public Deck deck;
@@ -20,5 +22,15 @@ public class PokerTable implements Serializable {
 
     public PokerTable() {
         this.deck = new Deck();
+    }
+
+    public void resetDeck() {
+        this.deck = new Deck();
+        this.deck.shuffle();
+        this.communityCards.clear();
+        this.pot = 0;
+        this.currentHighestBet = 0;
+        this.currentPhase = Phase.PREFLOP;
+        this.playersActedThisPhase = 0;
     }
 }

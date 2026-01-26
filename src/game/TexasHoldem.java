@@ -63,22 +63,15 @@ public class TexasHoldem {
         
         gameInProgress = true;
         
-        table.deck = new Deck();
-        table.deck.shuffle();
-        table.communityCards.clear();
-        table.pot = 0;
-        table.currentHighestBet = 0;
-        table.currentPhase = Phase.PREFLOP;
-        table.playersActedThisPhase = 0;
-        
         // OP: I suspect this is causing the weird dealer issue
         // table.dealerIndex = (table.dealerIndex + 1) % table.players.size();
         
+        table.resetDeck();;
         table.currentPlayerIndex = (table.dealerIndex + 1) % table.players.size();
 
-        for (Player p : table.players) p.resetForNewHand();
-
         for (Player p : table.players) {
+            p.resetForNewHand();
+
             Card c1 = table.deck.deal();
             Card c2 = table.deck.deal();
             p.holeCards.add(c1);
