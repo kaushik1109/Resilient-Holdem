@@ -45,7 +45,7 @@ public class Main {
                             if (parts.length > 1) payload += " " + parts[1];
                             
                             GameMessage actionMsg = new GameMessage(
-                                GameMessage.Type.ACTION_REQUEST, "", node.myPort, payload
+                                GameMessage.Type.ACTION_REQUEST, node.myPort, payload
                             );
 
                             if (node.election.iAmLeader) {
@@ -62,7 +62,7 @@ public class Main {
                             break;
                             
                         case "quit":
-                            node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE, "", node.myPort, ""));
+                            node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE, node.myPort));
                             System.exit(0);
                             break;
 

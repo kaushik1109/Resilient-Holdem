@@ -60,12 +60,7 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
     private void broadcastJoinRequest() {
         try (MulticastSocket socket = new MulticastSocket()) {
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
-            GameMessage msg = new GameMessage(
-                GameMessage.Type.JOIN_REQUEST, 
-                getPrivateIp(), 
-                myTcpPort, 
-                "Hello"
-            );
+            GameMessage msg = new GameMessage(GameMessage.Type.JOIN_REQUEST, myTcpPort);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ObjectOutputStream oos = new ObjectOutputStream(baos);
@@ -85,7 +80,6 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
         NetworkInterface bestCandidate = null;
 
         for (NetworkInterface netIf : java.util.Collections.list(nets)) {
-            // 1. Basic Checks
             if (!netIf.isUp()) continue;
             if (!netIf.supportsMulticast()) continue;
             if (netIf.isLoopback()) continue;
@@ -137,10 +131,5 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    private String getPrivateIp() {
-        try { return InetAddress.getLocalHost().getHostAddress(); } 
-        catch (UnknownHostException e) { return "127.0.0.1"; }
     }
 }

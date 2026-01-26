@@ -74,10 +74,7 @@ public class HoldBackQueue {
     private void sendNack(long missingSeq) {
         if (tcpLayer != null && leaderId != -1) {
             System.out.println("[Queue] Sending NACK for #" + missingSeq);
-            GameMessage nack = new GameMessage(
-                GameMessage.Type.NACK, "local", 0, String.valueOf(missingSeq)
-            );
-            tcpLayer.sendToPeer(leaderId, nack);
+            tcpLayer.sendNack(leaderId, missingSeq);
         }
     }
 

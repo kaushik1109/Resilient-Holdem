@@ -44,7 +44,6 @@ public class Sequencer {
 
         GameMessage orderedMsg = new GameMessage(
             typeToSend,
-            originalRequest.senderAddress,
             originalRequest.tcpPort,
             originalRequest.payload,
             seqId

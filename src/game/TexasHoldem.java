@@ -90,7 +90,7 @@ public class TexasHoldem {
             p.holeCards.add(c2);
             
             context.tcp.sendToPeer(p.id, new GameMessage(
-                GameMessage.Type.YOUR_HAND, "Leader", context.myPort, c1 + "," + c2
+                GameMessage.Type.YOUR_HAND, context.myPort, c1 + "," + c2
             ));
         }
         
@@ -98,7 +98,6 @@ public class TexasHoldem {
         notifyTurn();
     }
     
-    // Helper to send state to late joiners
     private void sendStateDump(int targetId) {
         if (!table.communityCards.isEmpty()) {
             StringBuilder sb = new StringBuilder();
@@ -106,7 +105,7 @@ public class TexasHoldem {
             sendPrivateMessage(GameMessage.Type.COMMUNITY_CARDS, targetId, sb.toString());
         }
 
-        sendPrivateState(targetId, "Spectating... (Pot: " + table.pot + ")");
+        sendPrivateState(targetId, "Spectating (Pot: " + table.pot + ")");
     }
 
     private void notifyTurn() {
@@ -311,7 +310,7 @@ public class TexasHoldem {
         }
         
         context.sequencer.multicastAction(new GameMessage(
-            GameMessage.Type.COMMUNITY_CARDS, "Leader", context.myPort, sb.toString()
+            GameMessage.Type.COMMUNITY_CARDS, context.myPort, sb.toString()
         ));
     }
 
@@ -350,9 +349,7 @@ public class TexasHoldem {
             
             summary.append("\n").append(winMsg);
 
-            context.sequencer.multicastAction(new GameMessage(
-                GameMessage.Type.SHOWDOWN, "Leader", context.myPort, summary.toString()
-            ));
+            context.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, context.myPort, summary.toString()));
         }
         
         passLeadership();
@@ -394,7 +391,7 @@ public class TexasHoldem {
             broadcastState(winMsg);
 
             context.sequencer.multicastAction(new GameMessage(
-                GameMessage.Type.SHOWDOWN, "Leader", context.myPort, winMsg
+                GameMessage.Type.SHOWDOWN, context.myPort, winMsg
             ));
         }
 
@@ -435,7 +432,7 @@ public class TexasHoldem {
 
     private void broadcastState(String msg) {
         context.sequencer.multicastAction(new GameMessage(
-            GameMessage.Type.GAME_STATE, "Leader", context.myPort, msg
+            GameMessage.Type.GAME_STATE, context.myPort, msg
         ));
     }
     
@@ -444,6 +441,6 @@ public class TexasHoldem {
     }
     
     private void sendPrivateMessage(GameMessage.Type type, int targetId, String msg) {
-        context.tcp.sendToPeer(targetId, new GameMessage(type, "Leader", context.myPort, msg));
+        context.tcp.sendToPeer(targetId, new GameMessage(type, context.myPort, msg));
     }
 }

@@ -26,21 +26,23 @@ public class GameMessage implements Serializable {
     }
 
     public Type type;
-    public String senderAddress; 
     public int tcpPort;          
     public String payload;
     
     public long sequenceNumber = -1; 
 
-    public GameMessage(Type type, String senderAddress, int tcpPort, String payload) {
+    public GameMessage(Type type, int tcpPort) {
         this.type = type;
-        this.senderAddress = senderAddress;
         this.tcpPort = tcpPort;
+    }
+
+    public GameMessage(Type type, int tcpPort, String payload) {
+        this(type, tcpPort);
         this.payload = payload;
     }
     
-    public GameMessage(Type type, String senderAddress, int tcpPort, String payload, long sequenceNumber) {
-        this(type, senderAddress, tcpPort, payload);
+    public GameMessage(Type type, int tcpPort, String payload, long sequenceNumber) {
+        this(type, tcpPort, payload);
         this.sequenceNumber = sequenceNumber;
     }
 }

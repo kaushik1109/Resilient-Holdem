@@ -43,11 +43,7 @@ public class TcpMeshManager {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-            GameMessage handshake = new GameMessage(
-                GameMessage.Type.HEARTBEAT, socket.getLocalAddress().getHostAddress(), myPort, "HANDSHAKE"
-            );
-            
-            out.writeObject(handshake);
+            out.writeObject(new GameMessage(GameMessage.Type.HEARTBEAT, myPort));
             out.flush();
 
             new Thread(() -> listenToPeer(in, socket, out)).start();
@@ -83,7 +79,13 @@ public class TcpMeshManager {
         try {
             Socket socket = new Socket(ip, port);
             handleNewConnection(socket);
-        } catch (IOException e) { /* Log error */ }
+        } catch (IOException e) {
+            System.out.println("[TCP] Could not connect to peer " + ip + ":" + port);
+        }
+    }
+
+    public void sendNack(int targetPeerId, long sequenceNumber) {
+        sendToPeer(targetPeerId, new GameMessage(GameMessage.Type.NACK, myPort, String.valueOf(sequenceNumber)));
     }
 
     public void sendToPeer(int targetPeerId, GameMessage msg) {
@@ -123,7 +125,7 @@ public class TcpMeshManager {
                 Thread.sleep(HEARTBEAT_INTERVAL);
                 
                 GameMessage hb = new GameMessage(
-                    GameMessage.Type.HEARTBEAT, "local", myPort, "Pulse"
+                    GameMessage.Type.HEARTBEAT, myPort, "Pulse"
                 );
                 broadcastToAll(hb);
             } catch (InterruptedException e) {}

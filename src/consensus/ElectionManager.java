@@ -54,8 +54,7 @@ public class ElectionManager {
         currentLeaderId = nextLeaderId;
 
         connectionManager.broadcastToAll(new GameMessage(
-            GameMessage.Type.COORDINATOR, 
-            "", 
+            GameMessage.Type.COORDINATOR,
             nextLeaderId, 
             serializedTablePayload
         ));
@@ -66,14 +65,14 @@ public class ElectionManager {
         
         electionInProgress = true;
         iAmLeader = false; 
-        System.out.println("[Election] Starting Election (" + reason + ")...");
+        System.out.println("[Election] Starting Election (" + reason + ")");
 
         boolean sentChallenge = false;
         
         for (int peerId : connectionManager.getConnectedPeerIds()) {
             if (peerId > myId) {
                 connectionManager.sendToPeer(peerId, new GameMessage(
-                    GameMessage.Type.ELECTION, "", myId, "Election"
+                    GameMessage.Type.ELECTION, myId, "Election"
                 ));
                 sentChallenge = true;
             }
@@ -100,7 +99,7 @@ public class ElectionManager {
         currentLeaderId = myId;
         electionInProgress = false;
         connectionManager.broadcastToAll(new GameMessage(
-            GameMessage.Type.COORDINATOR, "", myId, "Victory"
+            GameMessage.Type.COORDINATOR, myId, "Victory"
         ));
     }
 
@@ -109,7 +108,7 @@ public class ElectionManager {
             case ELECTION:
                 if (msg.tcpPort < myId) {
                     connectionManager.sendToPeer(msg.tcpPort, new GameMessage(
-                        GameMessage.Type.ELECTION_OK, "", myId, "Stop"
+                        GameMessage.Type.ELECTION_OK, myId, "Stop"
                     ));
                     startElection("Challenged by " + msg.tcpPort);
                 }
@@ -123,7 +122,7 @@ public class ElectionManager {
                 currentLeaderId = msg.tcpPort;
                 iAmLeader = (currentLeaderId == myId);
                 electionInProgress = false;
-                System.out.println("[Election] New Leader: " + msg.tcpPort + " (Reason: " + msg.payload + ")");
+                System.out.println("[Election] New Leader: " + msg.tcpPort);
                 break;
                 
             default: break;
