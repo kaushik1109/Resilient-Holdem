@@ -50,9 +50,7 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
 
                 if (msg.type == GameMessage.Type.JOIN_REQUEST) {
                     context.tcp.connectToPeer(senderIp, msg.tcpPort);
-                } 
-                
-                else {
+                } else {
                     context.routeMessage(msg);
                 }
             }
@@ -123,10 +121,6 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
         return NetworkInterface.getByName("127.0.0.1");
     }
 
-    /**
-     * Generic helper to send ANY message to the multicast group.
-     * Used by the Sequencer to broadcast game actions.
-     */
     public void sendMulticast(GameMessage msg) {
         try (MulticastSocket socket = new MulticastSocket()) {
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
@@ -140,7 +134,6 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
             socket.send(packet);
             
             System.out.println("[UDP] Sent Multicast: " + msg.type + " (Seq: " + msg.sequenceNumber + ")");
-            
         } catch (Exception e) {
             e.printStackTrace();
         }

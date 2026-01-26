@@ -29,8 +29,7 @@ public class HandEvaluator {
             .values().stream().anyMatch(count -> count >= 5);
 
         // Check Pairs/Trips
-        Map<Card.Rank, Long> counts = all.stream()
-            .collect(Collectors.groupingBy(c -> c.rank, Collectors.counting()));
+        Map<Card.Rank, Long> counts = all.stream().collect(Collectors.groupingBy(c -> c.rank, Collectors.counting()));
         
         boolean hasQuad = counts.values().contains(4L);
         boolean hasTrip = counts.values().contains(3L);
@@ -71,7 +70,7 @@ public class HandEvaluator {
         // Convert "14" back to "Ace", "13" to "King"
         String kickerName = getRankName(kickerValue);
         
-        // Make it readable: "FLUSH (Ace High)" or "PAIR (King High)"
+        // "FLUSH (Ace High)" or "PAIR (King High)"
         return rankName + " (" + kickerName + " High)";
     }
     

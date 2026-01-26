@@ -11,7 +11,7 @@ public class GameMessage implements Serializable {
         ELECTION, ELECTION_OK, COORDINATOR,
         SYNC,
 
-        LEAVE, //TODO: not actually sent
+        LEAVE,
         
         ACTION_REQUEST,
         ORDERED_MULTICAST,

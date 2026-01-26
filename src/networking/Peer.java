@@ -16,6 +16,6 @@ public class Peer {
         this.peerId = peerId;
         this.socket = socket;
         this.out = out;
-        this.lastSeenTimestamp = System.currentTimeMillis(); // Initialize to NOW
+        this.lastSeenTimestamp = System.currentTimeMillis();
     }
 }

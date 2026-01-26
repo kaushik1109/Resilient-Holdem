@@ -17,7 +17,6 @@ public class TcpMeshManager {
     
     private ConcurrentHashMap<Integer, Peer> peers = new ConcurrentHashMap<>();
 
-    // NEW Constructor takes Context
     public TcpMeshManager(int port, NodeContext context) {
         this.myPort = port;
         this.context = context;
@@ -44,10 +43,10 @@ public class TcpMeshManager {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-            // Handshake
             GameMessage handshake = new GameMessage(
                 GameMessage.Type.HEARTBEAT, socket.getLocalAddress().getHostAddress(), myPort, "HANDSHAKE"
             );
+            
             out.writeObject(handshake);
             out.flush();
 
@@ -75,7 +74,7 @@ public class TcpMeshManager {
                 context.routeMessage(msg);
             }
         } catch (Exception e) {
-            closeConnection(peerId);
+            context.onPeerDisconnected(peerId);
         }
     }
 
@@ -90,7 +89,6 @@ public class TcpMeshManager {
     public void sendToPeer(int targetPeerId, GameMessage msg) {
         Peer peer = peers.get(targetPeerId);
         if (peer == null) {
-            // Auto-reconnect logic (simplified)
             connectToPeer("localhost", targetPeerId);
             try { Thread.sleep(200); } catch(Exception e){}
             peer = peers.get(targetPeerId);
@@ -116,7 +114,6 @@ public class TcpMeshManager {
         if (peerId != -1 && peers.containsKey(peerId)) {
             Peer p = peers.remove(peerId);
             try { p.socket.close(); } catch (Exception e) {}
-            context.onPeerDisconnected(peerId);
         }
     }
     
@@ -124,11 +121,11 @@ public class TcpMeshManager {
         while (running) {
             try {
                 Thread.sleep(HEARTBEAT_INTERVAL);
-                // Send a lightweight message to everyone
+                
                 GameMessage hb = new GameMessage(
                     GameMessage.Type.HEARTBEAT, "local", myPort, "Pulse"
                 );
-                broadcastToAll(hb); // Re-use your existing broadcast method
+                broadcastToAll(hb);
             } catch (InterruptedException e) {}
         }
     }
@@ -142,7 +139,7 @@ public class TcpMeshManager {
                 for (Peer peer : peers.values()) {
                     if (now - peer.lastSeenTimestamp > TIMEOUT_THRESHOLD) {
                         System.err.println("[Heartbeat] Peer " + peer.peerId + " timed out!");
-                        closeConnection(peer.peerId); // Kill the connection
+                        context.onPeerDisconnected(peer.peerId);
                     }
                 }
             } catch (InterruptedException e) {}

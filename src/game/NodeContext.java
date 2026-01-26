@@ -51,7 +51,7 @@ public class NodeContext {
                 break;
 
             case LEAVE:
-                tcp.closeConnection(msg.tcpPort);
+                onPeerDisconnected(msg.tcpPort);
                 break;
                 
             case NACK:
@@ -126,6 +126,7 @@ public class NodeContext {
 
     public void onPeerDisconnected(int peerId) {
         System.err.println("[Context] Peer " + peerId + " disconnected/crashed.");
+        tcp.closeConnection(peerId);
 
         if (election != null) {
             election.handleNodeFailure(peerId);
