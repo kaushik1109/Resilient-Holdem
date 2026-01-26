@@ -12,7 +12,6 @@ public class Main {
         new Thread(() -> {
             try { Thread.sleep(5000); } catch (Exception e) {}
             if (node.election.iAmLeader && node.getServerGame() == null) {
-                System.out.println(">>> I AM THE GENESIS DEALER <<<");
                 node.createServerGame();
             }
         }).start();

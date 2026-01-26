@@ -73,7 +73,7 @@ public class NodeContext {
                     createServerGame(loadedTable);
                     this.election.iAmLeader = true;
                     
-                    System.out.println(">>> Game State Loaded. Type 'start' to begin next hand.");
+                    System.out.println(">>> Game State Loaded. Type 'start' to begin next hand");
                 } else {
                     election.handleMessage(msg);
                 }
@@ -125,7 +125,7 @@ public class NodeContext {
     }
 
     public void onPeerDisconnected(int peerId) {
-        System.err.println("[Context] Peer " + peerId + " disconnected/crashed.");
+        System.err.println("[Context] Peer " + peerId + " disconnected/crashed");
         tcp.closeConnection(peerId);
 
         if (election != null) {
@@ -142,7 +142,7 @@ public class NodeContext {
     public void createServerGame() {
         this.serverGame = new TexasHoldem(this);
         
-        System.out.println("[Context] Backfilling existing peers into the game...");
+        System.out.println("[Context] Backfilling existing peers into the game");
         for (int peerId : tcp.getConnectedPeerIds()) {
             this.serverGame.addPlayer(peerId);
         }
