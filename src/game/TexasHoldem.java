@@ -32,11 +32,6 @@ public class TexasHoldem {
 
         this.gameInProgress = true;
         context.queue.forceSync(context.sequencer.getCurrentSeqId());
-
-        long currentSeq = context.sequencer.getCurrentSeqId();
-        for (Player p : table.players) {
-            sendPrivateMessage(GameMessage.Type.SYNC, p.id, String.valueOf(currentSeq));
-        }
     }
 
     public void addPlayer(int playerId) {

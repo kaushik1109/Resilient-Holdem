@@ -71,9 +71,7 @@ public class ElectionManager {
         
         for (int peerId : connectionManager.getConnectedPeerIds()) {
             if (peerId > myId) {
-                connectionManager.sendToPeer(peerId, new GameMessage(
-                    GameMessage.Type.ELECTION, myId, "Election"
-                ));
+                connectionManager.sendToPeer(peerId, new GameMessage(GameMessage.Type.ELECTION, myId, "Election"));
                 sentChallenge = true;
             }
         }
@@ -95,6 +93,7 @@ public class ElectionManager {
     private synchronized void declareVictory() {
         if (!electionInProgress) return;
         System.out.println("[Election] I am the new Leader (Victory)");
+        
         iAmLeader = true;
         currentLeaderId = myId;
         electionInProgress = false;
@@ -107,9 +106,7 @@ public class ElectionManager {
         switch (msg.type) {
             case ELECTION:
                 if (msg.tcpPort < myId) {
-                    connectionManager.sendToPeer(msg.tcpPort, new GameMessage(
-                        GameMessage.Type.ELECTION_OK, myId, "Stop"
-                    ));
+                    connectionManager.sendToPeer(msg.tcpPort, new GameMessage(GameMessage.Type.ELECTION_OK, myId));
                     startElection("Challenged by " + msg.tcpPort);
                 }
                 break;
