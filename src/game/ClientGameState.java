@@ -26,8 +26,9 @@ public class ClientGameState {
         System.out.println(">>> GAME INFO: " + msg);
     }
     
-    public void printStatus() {
+    public void printStatus(int myPort) {
         System.out.println("\n>>> CURRENT STATUS");
+        System.out.println(">>> MY PORT: " + myPort);
         if (myHand.isEmpty()) {
              System.out.println(">>> HAND: [Spectating / Folded]");
         } else {

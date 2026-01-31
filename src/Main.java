@@ -16,10 +16,13 @@ public class Main {
             }
         }).start();
 
-        handleUserCommands(node);
+        handleUserCommands(node, myPort);
     }
 
-    private static void handleUserCommands(NodeContext node) {
+    private static void handleUserCommands(NodeContext node, int myPort) {
+        String payload;
+        GameMessage actionMsg;
+
         try (Scanner scanner = new Scanner(System.in)) {
             System.out.println("\nCOMMANDS: 'start' (Leader), 'bet <amt>', 'fold', 'check', 'allin'");
             
@@ -39,11 +42,37 @@ public class Main {
                             }
                             break;
 
-                        case "bet": case "fold": case "check": case "call": case "allin":
-                            String payload = cmd;
-                            if (parts.length > 1) payload += " " + parts[1];
+
+                        case "bet":  case "raise":
+                            if (parts.length < 2 || !parts[1].matches("\\d+")) {
+                                System.out.println("Enter a number to bet / raise. eg. bet 200");
+                                break;
+                            }
+
+                            payload = cmd + " " + parts[1];
                             
-                            GameMessage actionMsg = new GameMessage(
+                            actionMsg = new GameMessage(
+                                GameMessage.Type.ACTION_REQUEST, node.myPort, payload
+                            );
+
+                            if (node.election.iAmLeader) {
+                                node.sequencer.multicastAction(actionMsg);
+                            } else if (node.election.currentLeaderId != -1) {
+                                node.tcp.sendToPeer(node.election.currentLeaderId, actionMsg);
+                            } else {
+                                System.out.println("No Leader found yet.");
+                            }
+                            break;
+                        
+                        case "fold": case "check": case "call": case "allin":
+                            if (parts.length > 1) {
+                                System.out.println("Enter only the command for fold / call / check / allin");
+                                break;
+                            }
+
+                            payload = cmd;
+                            
+                            actionMsg = new GameMessage(
                                 GameMessage.Type.ACTION_REQUEST, node.myPort, payload
                             );
 
@@ -57,7 +86,7 @@ public class Main {
                             break;
 
                         case "status":
-                            node.clientGame.printStatus();
+                            node.clientGame.printStatus(myPort);
                             break;
                             
                         case "quit":
