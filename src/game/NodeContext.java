@@ -84,6 +84,8 @@ public class NodeContext {
             case GAME_STATE:
             case COMMUNITY_CARDS:
             case SHOWDOWN:
+                election.currentLeaderId = msg.tcpPort;
+
                 if (msg.sequenceNumber <= 0) {
                     if (msg.type == GameMessage.Type.GAME_STATE) {
                          clientGame.onReceiveState(msg.payload);
@@ -98,6 +100,7 @@ public class NodeContext {
                 break;
 
             case YOUR_HAND:
+                election.currentLeaderId = msg.tcpPort;
                 clientGame.onReceiveHand(msg.payload);
                 break;
             
