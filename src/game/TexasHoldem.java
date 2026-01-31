@@ -374,12 +374,9 @@ public class TexasHoldem {
 
         if (winner != null) {
             winner.chips += table.pot;
-            
-            String winMsg = "Round Over. Everyone folded. " + winner.name + " wins " + table.pot;
-            broadcastState(winMsg);
 
             context.sequencer.multicastAction(new GameMessage(
-                GameMessage.Type.SHOWDOWN, context.myPort, winMsg
+                GameMessage.Type.SHOWDOWN, context.myPort, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot
             ));
         }
 
