@@ -26,7 +26,11 @@ public class GameMessage implements Serializable {
     }
 
     public Type type;
-    public int tcpPort;          
+    public int tcpPort;
+    public String senderIp;
+    public int senderPort;
+    public String senderId;
+    public int senderHash;          
     public String payload;
     
     public long sequenceNumber = -1; 
@@ -37,10 +41,23 @@ public class GameMessage implements Serializable {
     }
 
     public GameMessage(Type type, int tcpPort, String payload) {
+        this.type = type;
+        this.tcpPort = tcpPort;
+        this.payload = payload;
+}
+
+    public GameMessage(Type type, int tcpPort, String ip, String payload) {
         this(type, tcpPort);
+
+        this.senderIp = ip;
+        this.senderPort = tcpPort;
+        this.senderId = ip + ":" + tcpPort;
+        this.senderHash = java.util.Objects.hash(ip, tcpPort);
+
         this.payload = payload;
     }
-    
+
+
     public GameMessage(Type type, int tcpPort, String payload, long sequenceNumber) {
         this(type, tcpPort, payload);
         this.sequenceNumber = sequenceNumber;

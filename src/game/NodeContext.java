@@ -1,5 +1,8 @@
 package game;
 
+import java.net.InetAddress;
+import java.util.Objects;
+
 import consensus.ElectionManager;
 import consensus.HoldBackQueue;
 import consensus.Sequencer;
@@ -9,6 +12,9 @@ import networking.GameMessage;
 
 public class NodeContext {
     public final int myPort;
+    public final String myIp;
+    public final String nodeId;     // "ip:port"
+    public final int nodeHash;
     
     public final TcpMeshManager tcp;
     public final UdpMulticastManager udp;
@@ -22,6 +28,18 @@ public class NodeContext {
     public NodeContext(int port) {
         this.myPort = port;
 
+        String ipTemp;
+        try {
+            ipTemp = InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            ipTemp = "unknown";
+        }
+
+        this.myIp = ipTemp;
+        this.nodeId = myIp + ":" + myPort;
+        this.nodeHash = Objects.hash(myIp, myPort);
+
+        
         this.clientGame = new ClientGameState();
         this.queue = new HoldBackQueue();
         

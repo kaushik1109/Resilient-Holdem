@@ -27,9 +27,9 @@ public class ClientGameState {
         System.out.println(">>> GAME INFO: " + msg);
     }
     
-    public void printStatus(int myPort) {
+    public void printStatus(String myIp, int myPort) {
         System.out.println("\n>>> CURRENT STATUS");
-        System.out.println(">>> MY PORT: " + myPort);
+        System.out.println(">>> NODE: " + myIp + ":" + myPort);
         if (myHand.isEmpty()) {
              System.out.println(">>> HAND: [Spectating / Folded]");
         } else {
@@ -107,7 +107,7 @@ public class ClientGameState {
                             break;
 
                         case "status":
-                            node.clientGame.printStatus(myPort);
+                            node.clientGame.printStatus(node.myIp, myPort);
                             break;
                             
                         case "quit":
