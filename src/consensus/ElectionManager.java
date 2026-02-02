@@ -56,11 +56,7 @@ public class ElectionManager {
         iAmLeader = false;
         currentLeaderId = nextLeaderId;
 
-        connectionManager.broadcastToAll(new GameMessage(
-            GameMessage.Type.COORDINATOR,
-            nextLeaderId, 
-            serializedTablePayload
-        ));
+        connectionManager.broadcastToAll(new GameMessage(GameMessage.Type.COORDINATOR, nextLeaderId, serializedTablePayload));
     }
 
     public synchronized void startElection(String reason) {
@@ -74,7 +70,8 @@ public class ElectionManager {
         
         for (int peerId : connectionManager.getConnectedPeerIds()) {
             if (peerId > myId) {
-                connectionManager.sendToPeer(peerId, new GameMessage(GameMessage.Type.ELECTION, myId, "Election"));
+                System.out.println("[Election] Challenging node " + peerId);
+                connectionManager.sendToPeer(peerId, new GameMessage(GameMessage.Type.ELECTION, myId));
                 sentChallenge = true;
             }
         }
@@ -110,7 +107,7 @@ public class ElectionManager {
             case ELECTION:
                 if (msg.tcpPort < myId) {
                     connectionManager.sendToPeer(msg.tcpPort, new GameMessage(GameMessage.Type.ELECTION_OK, myId));
-                    startElection("Challenged by " + msg.tcpPort);
+                    startElection("[Election] Challenged by " + msg.tcpPort);
                 }
                 break;
 
@@ -122,7 +119,7 @@ public class ElectionManager {
                 currentLeaderId = msg.tcpPort;
                 iAmLeader = (currentLeaderId == myId);
                 electionInProgress = false;
-                System.out.println("[Election] New Leader: " + msg.tcpPort);
+                System.out.println("[Election] Elected new leader: " + msg.tcpPort);
                 break;
                 
             default: break;

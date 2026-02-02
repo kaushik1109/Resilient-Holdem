@@ -63,9 +63,6 @@ public class TexasHoldem {
         
         gameInProgress = true;
         
-        // OP: I suspect this is causing the weird dealer issue
-        // table.dealerIndex = (table.dealerIndex + 1) % table.players.size();
-        
         table.resetDeck();;
         table.currentPlayerIndex = (table.dealerIndex + 1) % table.players.size();
 
@@ -137,14 +134,14 @@ public class TexasHoldem {
             switch (type) {
                 case "fold":
                     current.folded = true;
-                    broadcastState("Player " + playerId + " Folds.");
+                    broadcastState("Player " + playerId + " folds.");
                     actionValid = true;
                     break;
 
                 case "call":
                     int callAmt = table.currentHighestBet - current.currentBet;
                     if (payChips(current, callAmt)) {
-                        broadcastState("Player " + playerId + " Calls " + callAmt);
+                        broadcastState("Player " + playerId + " calls " + callAmt);
                         actionValid = true;
                     }
                     break;
@@ -154,7 +151,7 @@ public class TexasHoldem {
                         broadcastState("Player " + playerId + " Checks.");
                         actionValid = true;
                     } else {
-                        sendPrivateState(playerId, "Cannot Check. You must Call " + (table.currentHighestBet - current.currentBet));
+                        sendPrivateState(playerId, "Cannot check. You must call " + (table.currentHighestBet - current.currentBet));
                     }
                     break;
 
@@ -167,7 +164,7 @@ public class TexasHoldem {
                         int totalBet = current.currentBet; 
                         if (totalBet > table.currentHighestBet) {
                             table.currentHighestBet = totalBet;
-                            broadcastState("Player " + playerId + " Bets/Raises " + amount);
+                            broadcastState("Player " + playerId + " bets/raises " + amount);
                             actionValid = true;
                         } else {
                             sendPrivateState(playerId, "Bet too small. Must exceed " + table.currentHighestBet);
@@ -176,11 +173,10 @@ public class TexasHoldem {
                     break;
                     
                 case "allin":
-                     int allInAmt = current.chips;
-                     payChips(current, allInAmt);
+                     payChips(current, current.chips);
                      if (current.currentBet > table.currentHighestBet) table.currentHighestBet = current.currentBet;
                      current.allIn = true;
-                     broadcastState("Player " + playerId + " Goes all in!");
+                     broadcastState("Player " + playerId + " goes all in!");
                      actionValid = true;
                      break;
             }
@@ -278,7 +274,7 @@ public class TexasHoldem {
         }
         
         if (skipBetting) {
-            broadcastState("All players All-In (or only one active). Running it out...");
+            broadcastState("All players all-in (or only one active). Running it out");
             
             new Thread(() -> {
                 try { Thread.sleep(2000); } catch (Exception e) {}
@@ -323,20 +319,15 @@ public class TexasHoldem {
                    .append(" -> ").append(handDesc).append("\n");
             
             if (score > bestScore) {
+                winHandDescription = handDesc;
                 bestScore = score;
                 winner = p;
-                winHandDescription = handDesc;
             }
         }
         
         if (winner != null) {
             winner.chips += table.pot;
-            
-            String winMsg = "WINNER: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot;
-            broadcastState(winMsg);
-            
-            summary.append("\n").append(winMsg);
-
+            summary.append("\n").append("WINNER: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot);
             context.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, context.myPort, summary.toString()));
         }
         
@@ -356,10 +347,10 @@ public class TexasHoldem {
         p.isActive = false;
         p.folded = true; 
         
-        broadcastState("Player " + playerId + " disconnected and is Auto-Folded.");
+        broadcastState("Player " + playerId + " disconnected and is Auto-Folded");
 
         if (table.players.indexOf(p) == table.currentPlayerIndex) {
-            System.err.println("[Game] Crashed player had the turn. Forcing fold...");
+            System.err.println("[Game] Crashed player had the turn. Forcing fold");
             processAction(playerId, "fold");
         }
         
@@ -384,7 +375,7 @@ public class TexasHoldem {
     }
 
     private void passLeadership() {
-        System.out.println("[Game] Hand finished. Rotating Dealer...");
+        System.out.println("[Game] Hand finished. Rotating Dealer");
         
         String stateData = getSerializedState();
         
