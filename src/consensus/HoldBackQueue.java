@@ -15,7 +15,7 @@ public class HoldBackQueue {
     private long nextExpectedSeq = 1;
     private TcpMeshManager tcpLayer; 
     private ClientGameState clientGame;
-    private int leaderId = -1;
+    private String leaderId = null;
     private boolean isProcessing = false;
 
     private Consumer<GameMessage> onMessageReceived; 
@@ -32,7 +32,7 @@ public class HoldBackQueue {
         this.tcpLayer = tcpLayer;
     }
 
-    public void setLeaderId(int leaderId) {
+    public void setLeaderId(String leaderId) {
         this.leaderId = leaderId;
     }
 
@@ -72,7 +72,7 @@ public class HoldBackQueue {
     }
     
     private void sendNack(long missingSeq) {
-        if (tcpLayer != null && leaderId != -1) {
+        if (tcpLayer != null && leaderId != null) {
             System.out.println("[Queue] Sending NACK for #" + missingSeq);
             tcpLayer.sendNack(leaderId, missingSeq);
         }

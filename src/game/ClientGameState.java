@@ -27,9 +27,9 @@ public class ClientGameState {
         System.out.println(">>> GAME INFO: " + msg);
     }
     
-    public void printStatus(String myIp, int myPort) {
+    public void printStatus(String nodeId) {
         System.out.println("\n>>> CURRENT STATUS");
-        System.out.println(">>> NODE: " + myIp + ":" + myPort);
+        System.out.println(">>> NODE: " + nodeId);
         if (myHand.isEmpty()) {
              System.out.println(">>> HAND: [Spectating / Folded]");
         } else {
@@ -40,7 +40,7 @@ public class ClientGameState {
         System.out.println(">>> INFO:  " + status);
     }
 
-    public static void handleUserCommands(NodeContext node, int myPort) {
+    public static void handleUserCommands(NodeContext node) {
         String payload;
         GameMessage actionMsg;
 
@@ -56,11 +56,16 @@ public class ClientGameState {
                 try {
                     switch (cmd) {
                         case "start":
-                            if (node.getServerGame() != null) {
-                                node.getServerGame().startNewRound();
-                            } else {
+                            if (!node.election.iAmLeader) {
                                 System.out.println("Only the Leader can start the game.");
+                                break;
                             }
+
+                            if (node.getServerGame() == null) {
+                                node.createServerGame();   // 👈 THIS WAS MISSING
+                            }
+
+                            node.getServerGame().startNewRound();
                             break;
 
 
@@ -73,12 +78,12 @@ public class ClientGameState {
                             payload = cmd + " " + parts[1];
                             
                             actionMsg = new GameMessage(
-                                GameMessage.Type.ACTION_REQUEST, node.myPort, payload
+                                GameMessage.Type.ACTION_REQUEST, node.myPort, node.myIp, payload
                             );
 
                             if (node.election.iAmLeader) {
                                 node.sequencer.multicastAction(actionMsg);
-                            } else if (node.election.currentLeaderId != -1) {
+                            } else if (node.election.currentLeaderId != null) {
                                 node.tcp.sendToPeer(node.election.currentLeaderId, actionMsg);
                             } else {
                                 System.out.println("No Leader found yet.");
@@ -94,12 +99,12 @@ public class ClientGameState {
                             payload = cmd;
                             
                             actionMsg = new GameMessage(
-                                GameMessage.Type.ACTION_REQUEST, node.myPort, payload
+                                GameMessage.Type.ACTION_REQUEST, node.myPort, node.myIp, payload
                             );
 
                             if (node.election.iAmLeader) {
                                 node.sequencer.multicastAction(actionMsg);
-                            } else if (node.election.currentLeaderId != -1) {
+                            } else if (node.election.currentLeaderId != null) {
                                 node.tcp.sendToPeer(node.election.currentLeaderId, actionMsg);
                             } else {
                                 System.out.println("No Leader found yet.");
@@ -107,11 +112,11 @@ public class ClientGameState {
                             break;
 
                         case "status":
-                            node.clientGame.printStatus(node.myIp, myPort);
+                            node.clientGame.printStatus(node.nodeId);
                             break;
                             
                         case "quit":
-                            node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE, node.myPort));
+                            node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE, node.myPort, node.myIp));
                             System.exit(0);
                             break;
 

@@ -1,34 +1,37 @@
 package consensus;
 
 import networking.TcpMeshManager;
+import game.NodeContext;
 import networking.GameMessage;
 import java.util.ArrayList;
-import java.util.Collections;
+
 import java.util.List;
 
+
 public class ElectionManager {
-    private int myId;
+    
+    private final NodeContext context;
     private TcpMeshManager connectionManager;
     
     private volatile boolean electionInProgress = false;
     public volatile boolean iAmLeader = false; 
-    public int currentLeaderId = -1;
+    public volatile String currentLeaderId = null;
 
-    public ElectionManager(int myId, TcpMeshManager connectionManager) {
-        this.myId = myId;
+    public ElectionManager(NodeContext context, TcpMeshManager connectionManager) {
+        this.context = context;
         this.connectionManager = connectionManager;
     }
 
     public void startStabilizationPeriod() {
         new Thread(() -> {
             System.out.println("[Election] Listening for authoritative Leader signals...");
-            currentLeaderId = -1; // Reset to unknown
+            currentLeaderId = null; // Reset to unknown
             
             try {
                 Thread.sleep(3000); 
             } catch (InterruptedException e) { }
 
-            if (currentLeaderId != -1) {
+            if (currentLeaderId != null) {
                 System.out.println("[Election] Respecting existing Leader: " + currentLeaderId);
             } else {
                 System.out.println("[Election] No Leader found. Starting Election...");
@@ -40,14 +43,13 @@ public class ElectionManager {
     public void passLeadership(String serializedTablePayload) {
         if (!iAmLeader) return;
 
-        List<Integer> allNodes = new ArrayList<>(connectionManager.getConnectedPeerIds());
-        allNodes.add(myId);
-        Collections.sort(allNodes);
+        List<String> allNodes = new ArrayList<>(connectionManager.getConnectedPeerIds());
+        allNodes.add(context.nodeId);
+        allNodes.sort(String::compareTo); 
 
-        int myIndex = allNodes.indexOf(myId);
+        int myIndex = allNodes.indexOf(context.nodeId);
         int nextIndex = (myIndex + 1) % allNodes.size();
-        int nextLeaderId = allNodes.get(nextIndex);
-
+        String nextLeaderId = allNodes.get(nextIndex);
         System.out.println("[Election] Handing over leadership to Node " + nextLeaderId);
 
         iAmLeader = false;
@@ -55,7 +57,8 @@ public class ElectionManager {
 
         connectionManager.broadcastToAll(new GameMessage(
             GameMessage.Type.COORDINATOR,
-            nextLeaderId, 
+            context.myPort,
+            context.myIp,
             serializedTablePayload
         ));
     }
@@ -69,9 +72,18 @@ public class ElectionManager {
 
         boolean sentChallenge = false;
         
-        for (int peerId : connectionManager.getConnectedPeerIds()) {
-            if (peerId > myId) {
-                connectionManager.sendToPeer(peerId, new GameMessage(GameMessage.Type.ELECTION, myId, "Election"));
+        for (String peerId : connectionManager.getConnectedPeerIds()) {
+            int peerHash = peerId.hashCode();
+            if (peerHash > context.nodeHash) {
+                connectionManager.sendToPeer(
+                peerId,
+                new GameMessage(
+                    GameMessage.Type.ELECTION,
+                    context.myPort,
+                    context.myIp,
+                    "Election"
+                    )
+                );
                 sentChallenge = true;
             }
         }
@@ -95,19 +107,19 @@ public class ElectionManager {
         System.out.println("[Election] I am the new Leader (Victory)");
         
         iAmLeader = true;
-        currentLeaderId = myId;
+        currentLeaderId = context.nodeId;
         electionInProgress = false;
         connectionManager.broadcastToAll(new GameMessage(
-            GameMessage.Type.COORDINATOR, myId, "Victory"
+            GameMessage.Type.COORDINATOR, context.myPort, context.myIp, "Victory"
         ));
     }
 
     public void handleMessage(GameMessage msg) {
         switch (msg.type) {
             case ELECTION:
-                if (msg.tcpPort < myId) {
-                    connectionManager.sendToPeer(msg.tcpPort, new GameMessage(GameMessage.Type.ELECTION_OK, myId));
-                    startElection("Challenged by " + msg.tcpPort);
+                if (msg.senderHash < context.nodeHash) {
+                    connectionManager.sendToPeer(msg.senderId, new GameMessage(GameMessage.Type.ELECTION_OK, context.myPort, context.myIp));
+                    startElection("Challenged by " + msg.senderId);
                 }
                 break;
 
@@ -116,20 +128,20 @@ public class ElectionManager {
                 break;
 
             case COORDINATOR:
-                currentLeaderId = msg.tcpPort;
-                iAmLeader = (currentLeaderId == myId);
+                currentLeaderId = msg.senderId;
+                iAmLeader = currentLeaderId.equals(context.nodeId);
                 electionInProgress = false;
-                System.out.println("[Election] New Leader: " + msg.tcpPort);
+                System.out.println("[Election] New Leader: " + currentLeaderId);
                 break;
                 
             default: break;
         }
     }
     
-    public void handleNodeFailure(int deadNodeId) {
+    public void handleNodeFailure(String deadNodeId) {
         System.out.println("[Election] Detected failure of Node " + deadNodeId);
         
-        if (deadNodeId == currentLeaderId) {
+        if (deadNodeId.equals(currentLeaderId)) {
             System.err.println("[Election] The leader has crashed, starting election again");
             new Thread(() -> {
                 try { Thread.sleep(500); } catch(Exception e){}

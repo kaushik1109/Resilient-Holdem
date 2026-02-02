@@ -17,6 +17,6 @@ public class Main {
             }
         }).start();
 
-        ClientGameState.handleUserCommands(node, myPort);
+        ClientGameState.handleUserCommands(node);
     }
 }

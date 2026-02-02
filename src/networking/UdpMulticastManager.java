@@ -46,7 +46,11 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
                 String senderIp = packet.getAddress().getHostAddress();
                 //System.out.println("[UDP DEBUG] Received packet from " + senderIp + ":" + msg.tcpPort + " | Type: " + msg.type);
 
-                if (msg.tcpPort == myTcpPort && msg.sequenceNumber <= 0) continue;
+                if (msg.senderId != null &&
+                    msg.senderId.equals(context.nodeId) &&
+                    msg.sequenceNumber <= 0) {
+                    continue;
+                }
 
                 if (msg.type == GameMessage.Type.JOIN_REQUEST) {
                     context.tcp.connectToPeer(senderIp, msg.tcpPort);
@@ -60,7 +64,7 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
     private void broadcastJoinRequest() {
         try (MulticastSocket socket = new MulticastSocket()) {
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
-            GameMessage msg = new GameMessage(GameMessage.Type.JOIN_REQUEST, myTcpPort);
+            GameMessage msg = new GameMessage(GameMessage.Type.JOIN_REQUEST, myTcpPort, context.myIp);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ObjectOutputStream oos = new ObjectOutputStream(baos);

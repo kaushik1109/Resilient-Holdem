@@ -45,6 +45,7 @@ public class Sequencer {
         GameMessage orderedMsg = new GameMessage(
             typeToSend,
             originalRequest.tcpPort,
+            originalRequest.senderIp,
             originalRequest.payload,
             seqId
         );
@@ -59,7 +60,7 @@ public class Sequencer {
         }
     }
 
-    public void handleNack(GameMessage nackMsg, int requestorId) {
+    public void handleNack(GameMessage nackMsg, String requestorId) {
         try {
             long missingSeq = Long.parseLong(nackMsg.payload);
             

@@ -1,6 +1,7 @@
 package networking;
 
 import java.io.Serializable;
+import java.util.Objects;
 
 public class GameMessage implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -30,36 +31,30 @@ public class GameMessage implements Serializable {
     public String senderIp;
     public int senderPort;
     public String senderId;
-    public int senderHash;          
+    public int senderHash;
+
     public String payload;
     
     public long sequenceNumber = -1; 
 
-    public GameMessage(Type type, int tcpPort) {
+    public GameMessage(Type type, int tcpPort, String senderIp) {
         this.type = type;
+
         this.tcpPort = tcpPort;
-    }
 
-    public GameMessage(Type type, int tcpPort, String payload) {
-        this.type = type;
-        this.tcpPort = tcpPort;
-        this.payload = payload;
-}
-
-    public GameMessage(Type type, int tcpPort, String ip, String payload) {
-        this(type, tcpPort);
-
-        this.senderIp = ip;
+        this.senderIp = senderIp;
         this.senderPort = tcpPort;
-        this.senderId = ip + ":" + tcpPort;
-        this.senderHash = java.util.Objects.hash(ip, tcpPort);
+        this.senderId = senderIp + ":" + tcpPort;
+        this.senderHash = Objects.hash(senderId);
+    }
 
+    public GameMessage(Type type, int tcpPort, String senderIp, String payload) {
+        this(type, tcpPort, senderIp);
         this.payload = payload;
     }
 
-
-    public GameMessage(Type type, int tcpPort, String payload, long sequenceNumber) {
-        this(type, tcpPort, payload);
-        this.sequenceNumber = sequenceNumber;
+    public GameMessage(Type type, int tcpPort, String senderIp, String payload, long seq) {
+        this(type, tcpPort, senderIp, payload);
+        this.sequenceNumber = seq;
     }
 }

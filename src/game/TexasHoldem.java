@@ -20,13 +20,14 @@ public class TexasHoldem {
         this.context = context;
         this.table = loadedTable;
         
-        boolean removedSelf = table.players.removeIf(p -> p.id == context.myPort);
+        boolean removedSelf = table.players.removeIf(p -> p.id.equals(context.nodeId));
+
         if (removedSelf) {
-            System.out.println("[Game] I (Node " + context.myPort + ") am now Dealer. Leaving the table.");
+            System.out.println("[Game] I (Node " + context.nodeId + ") am now Dealer. Leaving the table.");
         }
 
         System.out.println("[Game] Reconciling player roster");
-        for (int peerId : context.tcp.getConnectedPeerIds()) {
+        for (String peerId : context.tcp.getConnectedPeerIds()) {
             addPlayer(peerId);
         }
 
@@ -34,10 +35,10 @@ public class TexasHoldem {
         context.queue.forceSync(context.sequencer.getCurrentSeqId());
     }
 
-    public void addPlayer(int playerId) {
-        if (playerId == context.myPort) return;
+    public void addPlayer(String playerId) {
+        if (playerId.equals(context.nodeId)) return;
         
-        if (table.players.stream().anyMatch(p -> p.id == playerId)) return;
+        if (table.players.stream().anyMatch(p -> p.id.equals(playerId))) return;
 
         Player newPlayer = new Player(playerId, 1000);
         
@@ -78,15 +79,15 @@ public class TexasHoldem {
             p.holeCards.add(c2);
             
             context.tcp.sendToPeer(p.id, new GameMessage(
-                GameMessage.Type.YOUR_HAND, context.myPort, c1 + "," + c2
+                GameMessage.Type.YOUR_HAND, context.myPort, context.myIp, c1 + "," + c2
             ));
         }
         
-        broadcastState("New Round! Dealer Node is " + context.myPort + ". Button is Player " + table.players.get(table.dealerIndex).id);
+        broadcastState("New Round! Dealer Node is " + context.nodeId + ". Button is Player " + table.players.get(table.dealerIndex).id);
         notifyTurn();
     }
     
-    private void sendStateDump(int targetId) {
+    private void sendStateDump(String targetId) {
         if (!table.communityCards.isEmpty()) {
             StringBuilder sb = new StringBuilder();
             for (Card c : table.communityCards) sb.append(c.toString()).append(",");
@@ -104,27 +105,27 @@ public class TexasHoldem {
 
     public void handleClientRequest(GameMessage msg) {
         if (!gameInProgress) {
-            sendPrivateState(msg.tcpPort, "Game not started.");
+            sendPrivateState(msg.senderId, "Game not started.");
             return;
         }
 
         Player current = table.players.get(table.currentPlayerIndex);
         
-        if (current.id != msg.tcpPort) {
-            System.out.println("[Server] Rejecting out-of-turn move from " + msg.tcpPort);
-            sendPrivateState(msg.tcpPort, "Not your turn! Current turn: " + current.id);
+        if (!current.id.equals(msg.senderId)) {
+            System.out.println("[Server] Rejecting out-of-turn move from " + msg.senderId);
+            sendPrivateState(msg.senderId, "Not your turn! Current turn: " + current.id);
             return;
         }
 
         context.sequencer.multicastAction(msg);
     }
 
-    public void processAction(int playerId, String command) {
+    public void processAction(String playerId, String command) {
         if (!gameInProgress) return;
 
         Player current = table.players.get(table.currentPlayerIndex);
         
-        if (current.id != playerId) {
+        if (!current.id.equals(playerId)) {
             System.out.println("[Server] Ignored action from " + playerId + " (Not their turn)");
             return;
         }
@@ -298,7 +299,7 @@ public class TexasHoldem {
         }
         
         context.sequencer.multicastAction(new GameMessage(
-            GameMessage.Type.COMMUNITY_CARDS, context.myPort, sb.toString()
+            GameMessage.Type.COMMUNITY_CARDS, context.myPort, context.myIp, sb.toString()
         ));
     }
 
@@ -337,15 +338,15 @@ public class TexasHoldem {
             
             summary.append("\n").append(winMsg);
 
-            context.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, context.myPort, summary.toString()));
+            context.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, context.myPort, context.myIp, summary.toString()));
         }
         
         passLeadership();
     }
 
-    public void handlePlayerCrash(int playerId) {
+    public void handlePlayerCrash(String playerId) {
         Player p = table.players.stream()
-            .filter(player -> player.id == playerId)
+            .filter(player -> player.id.equals(playerId))
             .findFirst()
             .orElse(null);
 
@@ -376,7 +377,7 @@ public class TexasHoldem {
             winner.chips += table.pot;
 
             context.sequencer.multicastAction(new GameMessage(
-                GameMessage.Type.SHOWDOWN, context.myPort, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot
+                GameMessage.Type.SHOWDOWN, context.myPort, context.myIp, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot
             ));
         }
 
@@ -417,15 +418,15 @@ public class TexasHoldem {
 
     private void broadcastState(String msg) {
         context.sequencer.multicastAction(new GameMessage(
-            GameMessage.Type.GAME_STATE, context.myPort, msg
+            GameMessage.Type.GAME_STATE, context.myPort, context.myIp, msg
         ));
     }
     
-    private void sendPrivateState(int targetId, String msg) {
+    private void sendPrivateState(String targetId, String msg) {
         sendPrivateMessage(GameMessage.Type.GAME_STATE, targetId, msg);
     }
     
-    private void sendPrivateMessage(GameMessage.Type type, int targetId, String msg) {
-        context.tcp.sendToPeer(targetId, new GameMessage(type, context.myPort, msg));
+    private void sendPrivateMessage(GameMessage.Type type, String targetId, String msg) {
+        context.tcp.sendToPeer(targetId, new GameMessage(type, context.myPort, context.myIp, msg));
     }
 }
