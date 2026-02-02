@@ -36,6 +36,12 @@ public class HoldBackQueue {
         this.leaderId = leaderId;
     }
 
+    public void setQueueAttributes(TcpMeshManager tcpLayer, ClientGameState clientGameState, Consumer<GameMessage> callback) {
+        this.tcpLayer = tcpLayer;
+        this.clientGame = clientGameState;
+        this.onMessageReceived = callback;
+    }
+
     public synchronized void addMessage(GameMessage msg) {
         queue.add(msg);
         processQueue();
@@ -48,6 +54,7 @@ public class HoldBackQueue {
         try {
             while (!queue.isEmpty()) {
                 GameMessage head = queue.peek();
+                System.out.println("[Queue] Processing #" + head.sequenceNumber + ", expecting #" + nextExpectedSeq);
 
                 if (head.sequenceNumber == nextExpectedSeq) {
                     queue.poll();
@@ -72,10 +79,8 @@ public class HoldBackQueue {
     }
     
     private void sendNack(long missingSeq) {
-        if (tcpLayer != null && leaderId != -1) {
-            System.out.println("[Queue] Sending NACK for #" + missingSeq);
-            tcpLayer.sendNack(leaderId, missingSeq);
-        }
+        System.out.println("[Queue] Sending NACK for #" + missingSeq);
+        tcpLayer.sendNack(leaderId, missingSeq);
     }
 
     public synchronized void forceSync(long catchUpSeq) {

@@ -2,6 +2,7 @@ package game;
 
 import java.util.*;
 import networking.GameMessage;
+import networking.NetworkConfig;
 
 public class ClientGameState {
     public List<String> myHand = new ArrayList<>();
@@ -27,9 +28,10 @@ public class ClientGameState {
         System.out.println(">>> GAME INFO: " + msg);
     }
     
-    public void printStatus(int myPort) {
+    public void printStatus(int leaderId) {
         System.out.println("\n>>> CURRENT STATUS");
-        System.out.println(">>> MY PORT: " + myPort);
+        System.out.println(">>> MY PORT: " + NetworkConfig.MY_PORT);
+        System.out.println(">>> LEADER: " + leaderId);
         if (myHand.isEmpty()) {
              System.out.println(">>> HAND: [Spectating / Folded]");
         } else {
@@ -40,12 +42,12 @@ public class ClientGameState {
         System.out.println(">>> INFO:  " + status);
     }
 
-    public static void handleUserCommands(NodeContext node, int myPort) {
+    public static void handleUserCommands(NodeContext node) {
         String payload;
         GameMessage actionMsg;
 
         try (Scanner scanner = new Scanner(System.in)) {
-            System.out.println("\nCOMMANDS: 'start' (Leader), 'bet / raise <amt>', 'call', 'fold', 'check', 'allin', 'quit");
+            System.out.println("\nCOMMANDS: 'start' (Leader), 'bet / raise <amt>', 'call', 'fold', 'check', 'allin', 'quit', 'dropnext'");
             
             while (true) {
                 String line = scanner.nextLine().trim();
@@ -56,15 +58,18 @@ public class ClientGameState {
                 try {
                     switch (cmd) {
                         case "start":
-                            if (node.getServerGame() != null) {
+                            if (node.election.iAmLeader) {
+                                if (node.getServerGame() == null) {
+                                    node.createServerGame();
+                                }
+
                                 node.getServerGame().startNewRound();
                             } else {
                                 System.out.println("Only the Leader can start the game.");
                             }
                             break;
 
-
-                        case "bet":  case "raise":
+                        case "bet": case "raise":
                             if (parts.length < 2 || !parts[1].matches("\\d+")) {
                                 System.out.println("Enter a number to bet / raise. eg. bet 200");
                                 break;
@@ -107,12 +112,17 @@ public class ClientGameState {
                             break;
 
                         case "status":
-                            node.clientGame.printStatus(myPort);
+                            node.clientGame.printStatus(node.election.currentLeaderId);
                             break;
                             
                         case "quit":
                             node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE, node.myPort));
                             System.exit(0);
+                            break;
+                        
+                        case "dropnext":
+                            node.dropNext = true;
+                            System.out.println("The next game message will be dropped");
                             break;
 
                         default:

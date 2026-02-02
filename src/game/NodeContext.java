@@ -6,9 +6,12 @@ import consensus.Sequencer;
 import networking.TcpMeshManager;
 import networking.UdpMulticastManager;
 import networking.GameMessage;
+import networking.NetworkConfig;
 
 public class NodeContext {
     public final int myPort;
+
+    public boolean dropNext;
     
     public final TcpMeshManager tcp;
     public final UdpMulticastManager udp;
@@ -19,33 +22,35 @@ public class NodeContext {
     
     private TexasHoldem serverGame;
 
-    public NodeContext(int port) {
-        this.myPort = port;
+    public NodeContext() {
+        this.myPort = NetworkConfig.MY_PORT;
 
         this.clientGame = new ClientGameState();
         this.queue = new HoldBackQueue();
         
-        this.tcp = new TcpMeshManager(port, this); 
-        this.udp = new UdpMulticastManager(port, this);
+        this.tcp = new TcpMeshManager(myPort, this); 
+        this.udp = new UdpMulticastManager(myPort, this);
         
-        this.election = new ElectionManager(port, tcp);
-        this.sequencer = new Sequencer(udp);
+        this.election = new ElectionManager(myPort, tcp);
+        this.sequencer = new Sequencer(udp, tcp);
 
-        queue.setTcpLayer(tcp);
-        queue.setClientGame(clientGame);
-        queue.setCallback(this::handleQueueDelivery);
-        
-        sequencer.setTcpLayer(tcp);
-        sequencer.setLocalQueue(queue);
+        queue.setQueueAttributes(tcp, clientGame, this::handleQueueDelivery);
     }
 
     public void start() {
         tcp.start();
         udp.start();
         election.startStabilizationPeriod();
+        ClientGameState.handleUserCommands(this);
     }
 
     public void routeMessage(GameMessage msg) {
+        if (dropNext && msg.sequenceNumber > 0) {
+            System.err.println("[Context] Simulating omission. Dropped Msg #" + msg.sequenceNumber);
+            dropNext = false;
+            return;
+        }
+
         switch (msg.type) {
             case HEARTBEAT:
                 break;
@@ -65,6 +70,7 @@ public class NodeContext {
 
             case COORDINATOR:
                 election.currentLeaderId = msg.tcpPort;
+                queue.setLeaderId(msg.tcpPort);
                 
                 if (msg.tcpPort == myPort) {
                     System.out.println("[Context] Leadership passed to me");
@@ -84,8 +90,6 @@ public class NodeContext {
             case GAME_STATE:
             case COMMUNITY_CARDS:
             case SHOWDOWN:
-                election.currentLeaderId = msg.tcpPort;
-
                 if (msg.sequenceNumber <= 0) {
                     if (msg.type == GameMessage.Type.GAME_STATE) {
                          clientGame.onReceiveState(msg.payload);
@@ -100,7 +104,6 @@ public class NodeContext {
                 break;
 
             case YOUR_HAND:
-                election.currentLeaderId = msg.tcpPort;
                 clientGame.onReceiveHand(msg.payload);
                 break;
             

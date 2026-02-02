@@ -7,7 +7,7 @@ import java.util.Enumeration;
 import game.NodeContext;
 
 public class UdpMulticastManager {
-private static final String MULTICAST_GROUP = NetworkConfig.MULTICAST_GROUP;
+    private static final String MULTICAST_GROUP = NetworkConfig.MULTICAST_GROUP;
     private static final int MULTICAST_PORT = NetworkConfig.MULTICAST_PORT;
     
     private final int myTcpPort;
