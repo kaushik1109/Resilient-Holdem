@@ -77,6 +77,7 @@ public class ElectionManager {
         }
 
         if (!sentChallenge) {
+            System.out.println("[Election] No higher nodes, declaring victory");
             declareVictory();
             return;
         }
@@ -85,6 +86,7 @@ public class ElectionManager {
             try {
                 Thread.sleep(2000); 
                 if (!electionInProgress) return;
+                System.out.println("[Election] No higher nodes have responded, declaring victory");
                 declareVictory();
             } catch (Exception e) {}
         }).start();
@@ -92,14 +94,12 @@ public class ElectionManager {
 
     private synchronized void declareVictory() {
         if (!electionInProgress) return;
-        System.out.println("[Election] I am the new Leader (Victory)");
+        System.out.println("[Election] I am the new Leader");
         
         iAmLeader = true;
         currentLeaderId = myId;
         electionInProgress = false;
-        connectionManager.broadcastToAll(new GameMessage(
-            GameMessage.Type.COORDINATOR, myId, "Victory"
-        ));
+        connectionManager.broadcastToAll(new GameMessage(GameMessage.Type.COORDINATOR, myId));
     }
 
     public void handleMessage(GameMessage msg) {
@@ -107,7 +107,7 @@ public class ElectionManager {
             case ELECTION:
                 if (msg.tcpPort < myId) {
                     connectionManager.sendToPeer(msg.tcpPort, new GameMessage(GameMessage.Type.ELECTION_OK, myId));
-                    startElection("[Election] Challenged by " + msg.tcpPort);
+                    startElection("Challenged by " + msg.tcpPort);
                 }
                 break;
 

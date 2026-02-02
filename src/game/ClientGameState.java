@@ -76,12 +76,8 @@ public class ClientGameState {
                                 System.out.println("Enter a number to bet / raise. eg. bet 200");
                                 break;
                             }
-
-                            payload = cmd + " " + parts[1];
                             
-                            actionMsg = new GameMessage(
-                                GameMessage.Type.ACTION_REQUEST, node.myPort, payload
-                            );
+                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, node.myPort, cmd + " " + parts[1]);
 
                             if (node.election.iAmLeader) {
                                 node.sequencer.multicastAction(actionMsg);
@@ -97,12 +93,8 @@ public class ClientGameState {
                                 System.out.println("Enter only the command for fold / call / check / allin");
                                 break;
                             }
-
-                            payload = cmd;
                             
-                            actionMsg = new GameMessage(
-                                GameMessage.Type.ACTION_REQUEST, node.myPort, payload
-                            );
+                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, node.myPort, cmd);
 
                             if (node.election.iAmLeader) {
                                 node.sequencer.multicastAction(actionMsg);

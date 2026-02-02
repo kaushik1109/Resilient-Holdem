@@ -124,9 +124,7 @@ public class TcpMeshManager {
             try {
                 Thread.sleep(HEARTBEAT_INTERVAL);
                 
-                GameMessage hb = new GameMessage(
-                    GameMessage.Type.HEARTBEAT, myPort, "Pulse"
-                );
+                GameMessage hb = new GameMessage(GameMessage.Type.HEARTBEAT, myPort);
                 broadcastToAll(hb);
             } catch (InterruptedException e) {}
         }

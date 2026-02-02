@@ -74,9 +74,7 @@ public class TexasHoldem {
             p.holeCards.add(c1);
             p.holeCards.add(c2);
             
-            context.tcp.sendToPeer(p.id, new GameMessage(
-                GameMessage.Type.YOUR_HAND, context.myPort, c1 + "," + c2
-            ));
+            context.tcp.sendToPeer(p.id, new GameMessage(GameMessage.Type.YOUR_HAND, context.myPort, c1 + "," + c2));
         }
         
         broadcastState("New Round! Dealer Node is " + context.myPort + ". Button is Player " + table.players.get(table.dealerIndex).id);
@@ -293,9 +291,7 @@ public class TexasHoldem {
             sb.append(c.toString()).append(",");
         }
         
-        context.sequencer.multicastAction(new GameMessage(
-            GameMessage.Type.COMMUNITY_CARDS, context.myPort, sb.toString()
-        ));
+        context.sequencer.multicastAction(new GameMessage(GameMessage.Type.COMMUNITY_CARDS, context.myPort, sb.toString()));
     }
 
     private void performShowdown() {
