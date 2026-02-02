@@ -21,10 +21,10 @@ public class ElectionManager {
 
     public void startStabilizationPeriod() {
         new Thread(() -> {
-            System.out.println("[Election] Listening for authoritative Leader signals...");
+            System.out.println("[Election] Listening for authoritative Leader signals");
             currentLeaderId = -1;
 
-            while (connectionManager.getConnectedPeerIds().size() < 3) {
+            while (connectionManager.getConnectedPeerIds().size() < 2) {
                 try {
                     Thread.sleep(1000); 
                 } catch (InterruptedException e) { }
@@ -35,7 +35,7 @@ public class ElectionManager {
                 }
             }
 
-            System.out.println("[Election] No Leader found. Starting Election...");
+            System.out.println("[Election] No Leader found. Starting Election");
             startElection("Startup");
         }).start();
     }
