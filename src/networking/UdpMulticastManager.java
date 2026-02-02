@@ -7,8 +7,8 @@ import java.util.Enumeration;
 import game.NodeContext;
 
 public class UdpMulticastManager {
-private static final String MULTICAST_GROUP = "239.255.1.1";
-    private static final int MULTICAST_PORT = 8888;
+private static final String MULTICAST_GROUP = NetworkConfig.MULTICAST_GROUP;
+    private static final int MULTICAST_PORT = NetworkConfig.MULTICAST_PORT;
     
     private final int myTcpPort;
     private final NodeContext context;
@@ -59,6 +59,7 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
 
     private void broadcastJoinRequest() {
         try (MulticastSocket socket = new MulticastSocket()) {
+            socket.setTimeToLive(NetworkConfig.MULTICAST_TTL);
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
             GameMessage msg = new GameMessage(GameMessage.Type.JOIN_REQUEST, myTcpPort);
 
@@ -117,6 +118,7 @@ private static final String MULTICAST_GROUP = "239.255.1.1";
 
     public void sendMulticast(GameMessage msg) {
         try (MulticastSocket socket = new MulticastSocket()) {
+            socket.setTimeToLive(NetworkConfig.MULTICAST_TTL);
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
             
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
