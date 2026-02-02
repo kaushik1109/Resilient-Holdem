@@ -22,18 +22,21 @@ public class ElectionManager {
     public void startStabilizationPeriod() {
         new Thread(() -> {
             System.out.println("[Election] Listening for authoritative Leader signals...");
-            currentLeaderId = -1; // Reset to unknown
-            
-            try {
-                Thread.sleep(3000); 
-            } catch (InterruptedException e) { }
+            currentLeaderId = -1;
 
-            if (currentLeaderId != -1) {
-                System.out.println("[Election] Respecting existing Leader: " + currentLeaderId);
-            } else {
-                System.out.println("[Election] No Leader found. Starting Election...");
-                startElection("Startup");
+            while (connectionManager.getConnectedPeerIds().size() < 3) {
+                try {
+                    Thread.sleep(1000); 
+                } catch (InterruptedException e) { }
+
+                if (currentLeaderId != -1) {
+                    System.out.println("[Election] Respecting existing Leader: " + currentLeaderId);
+                    return;
+                }
             }
+
+            System.out.println("[Election] No Leader found. Starting Election...");
+            startElection("Startup");
         }).start();
     }
 
