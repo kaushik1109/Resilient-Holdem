@@ -7,19 +7,17 @@ import networking.NetworkConfig;
 public class ClientGameState {
     public List<String> myHand = new ArrayList<>();
     public List<String> communityCards = new ArrayList<>();
-    public String status = "Waiting for game...";
+    public String status = "Waiting for game";
     
     public void onReceiveHand(String payload) {
-        String[] cards = payload.split(",");
         myHand.clear();
-        Collections.addAll(myHand, cards);
+        Collections.addAll(myHand, payload.split(","));
         System.out.println(">>> MY HAND: " + myHand);
     }
     
     public void onReceiveCommunity(String payload) {
-        String[] cards = payload.split(",");
         communityCards.clear();
-        Collections.addAll(communityCards, cards);
+        Collections.addAll(communityCards, payload.split(","));
         System.out.println(">>> BOARD: " + communityCards);
     }
     
@@ -39,7 +37,11 @@ public class ClientGameState {
         }
         
         System.out.println(">>> BOARD: " + communityCards);
-        System.out.println(">>> INFO:  " + status);
+        System.out.println(">>> GAME STATUS:  " + status);
+    }
+
+    public static void printHelp() {
+        System.out.println("\nCOMMANDS: 'start' (Leader), 'bet / raise <amt>', 'call', 'fold', 'check', 'allin', 'quit', 'dropnext', 'help'");
     }
 
     public static void handleUserCommands(NodeContext node) {
@@ -47,7 +49,7 @@ public class ClientGameState {
         GameMessage actionMsg;
 
         try (Scanner scanner = new Scanner(System.in)) {
-            System.out.println("\nCOMMANDS: 'start' (Leader), 'bet / raise <amt>', 'call', 'fold', 'check', 'allin', 'quit', 'dropnext'");
+            printHelp();
             
             while (true) {
                 String line = scanner.nextLine().trim();
@@ -123,6 +125,11 @@ public class ClientGameState {
                         case "dropnext":
                             node.dropNext = true;
                             System.out.println("The next game message will be dropped");
+                            break;
+                        
+                        case "help":
+                        case "commands":
+                            printHelp();
                             break;
 
                         default:

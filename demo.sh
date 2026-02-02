@@ -4,7 +4,7 @@ mkdir -p bin
 javac -d bin src/networking/*.java src/consensus/*.java src/game/*.java src/Main.java
 
 if [ $? -eq 0 ]; then
-    echo "Compilation Successful. Launching Nodes..."
+    echo "Compilation Successful. Launching Nodes"
 else
     echo "Compilation Failed!"
     exit 1

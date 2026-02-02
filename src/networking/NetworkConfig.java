@@ -21,23 +21,13 @@ public class NetworkConfig {
             return;
         }
 
-        MULTICAST_GROUP =
-            props.getProperty("multicast.group", MULTICAST_GROUP);
+        MULTICAST_GROUP = props.getProperty("multicast.group", MULTICAST_GROUP);
 
-        MULTICAST_PORT =
-            Integer.parseInt(
-                props.getProperty("multicast.port",
-                    String.valueOf(MULTICAST_PORT)));
+        MULTICAST_PORT = Integer.parseInt(props.getProperty("multicast.port", String.valueOf(MULTICAST_PORT)));
 
-        MULTICAST_TTL =
-            Integer.parseInt(
-                props.getProperty("multicast.ttl",
-                    String.valueOf(MULTICAST_TTL)));
+        MULTICAST_TTL = Integer.parseInt(props.getProperty("multicast.ttl", String.valueOf(MULTICAST_TTL)));
 
-        MY_PORT =
-            Integer.parseInt(
-                props.getProperty("port",
-                    String.valueOf(MY_PORT)));
+        MY_PORT = Integer.parseInt(props.getProperty("port", String.valueOf(MY_PORT)));
     }
 
     private NetworkConfig() {}

@@ -20,7 +20,7 @@ public class HandEvaluator {
         all.addAll(hole);
         all.addAll(community);
         
-        // Sort by rank descending (Ace, King, Queen...)
+        // Sort by rank descending (Ace, King, Queen, ...)
         all.sort((a, b) -> b.rank.value - a.rank.value);
 
         // Check Flush
