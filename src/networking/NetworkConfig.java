@@ -4,8 +4,6 @@ import java.io.FileInputStream;
 import java.util.Properties;
 
 public class NetworkConfig {
-
-public static boolean MULTICAST_ENABLED = true;
     public static String MULTICAST_GROUP = "239.255.1.1";
     public static int MULTICAST_PORT = 8888;
     public static int MULTICAST_TTL = 1;
@@ -15,15 +13,11 @@ public static boolean MULTICAST_ENABLED = true;
 
         try (FileInputStream fis = new FileInputStream("network.config")) {
             props.load(fis);
-            System.out.println("[NET] Loaded network.config");
+            System.out.println("[Config] Loaded network.config");
         } catch (Exception e) {
-            System.out.println("[NET] No network.config found, using defaults.");
+            System.out.println("[Config] No network.config found, using defaults.");
             return;
         }
-
-        MULTICAST_ENABLED =
-            Boolean.parseBoolean(
-                props.getProperty("multicast.enabled", "true"));
 
         MULTICAST_GROUP =
             props.getProperty("multicast.group", MULTICAST_GROUP);

@@ -1,8 +1,6 @@
 import game.NodeContext;
-import networking.GameMessage;
 import networking.NetworkConfig;
 
-import java.util.Scanner;
 import java.util.Random;
 import game.ClientGameState;
 
