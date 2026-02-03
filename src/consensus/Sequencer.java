@@ -33,7 +33,7 @@ public class Sequencer {
             typeToSend = GameMessage.Type.PLAYER_ACTION;
         }
 
-        GameMessage orderedMsg = new GameMessage(typeToSend, originalRequest.tcpPort, originalRequest.payload, seqId);
+        GameMessage orderedMsg = new GameMessage(typeToSend, originalRequest.tcpPort, originalRequest.senderIp, originalRequest.payload, seqId);
 
         historyBuffer.put(seqId, orderedMsg);
         System.out.println("[Sequencer] Broadcasting #" + seqId + " (" + typeToSend + "): " + originalRequest.payload);
@@ -41,7 +41,7 @@ public class Sequencer {
         udpLayer.sendMulticast(orderedMsg); 
     }
 
-    public void handleNack(GameMessage nackMsg, int requestorId) {
+    public void handleNack(GameMessage nackMsg, String requestorId) {
         try {
             long missingSeq = Long.parseLong(nackMsg.payload);
             System.out.println("[Sequencer] Node " + requestorId + "requesting retransmission of #" + missingSeq);

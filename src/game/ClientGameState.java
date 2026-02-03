@@ -26,9 +26,9 @@ public class ClientGameState {
         System.out.println(">>> GAME INFO: " + msg);
     }
     
-    public void printStatus(int leaderId) {
+    public void printStatus(String nodeId, String leaderId) {
         System.out.println("\n>>> CURRENT STATUS");
-        System.out.println(">>> MY PORT: " + NetworkConfig.MY_PORT);
+        System.out.println(">>> NODE: " + nodeId);
         System.out.println(">>> LEADER: " + leaderId);
         if (myHand.isEmpty()) {
              System.out.println(">>> HAND: [Spectating / Folded]");
@@ -77,11 +77,11 @@ public class ClientGameState {
                                 break;
                             }
                             
-                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, node.myPort, cmd + " " + parts[1]);
+                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, node.myPort, node.myIp, cmd + " " + parts[1]);
 
                             if (node.election.iAmLeader) {
                                 node.sequencer.multicastAction(actionMsg);
-                            } else if (node.election.currentLeaderId != -1) {
+                            } else if (node.election.currentLeaderId != null) {
                                 node.tcp.sendToPeer(node.election.currentLeaderId, actionMsg);
                             } else {
                                 System.out.println("No Leader found yet.");
@@ -94,11 +94,11 @@ public class ClientGameState {
                                 break;
                             }
                             
-                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, node.myPort, cmd);
+                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, node.myPort, node.myIp, cmd);
 
                             if (node.election.iAmLeader) {
                                 node.sequencer.multicastAction(actionMsg);
-                            } else if (node.election.currentLeaderId != -1) {
+                            } else if (node.election.currentLeaderId != null) {
                                 node.tcp.sendToPeer(node.election.currentLeaderId, actionMsg);
                             } else {
                                 System.out.println("No Leader found yet.");
@@ -106,11 +106,11 @@ public class ClientGameState {
                             break;
 
                         case "status":
-                            node.clientGame.printStatus(node.election.currentLeaderId);
+                            node.clientGame.printStatus(node.nodeId, node.election.currentLeaderId);
                             break;
                             
                         case "quit":
-                            node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE, node.myPort));
+                            node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE, node.myPort, node.myIp));
                             System.exit(0);
                             break;
                         

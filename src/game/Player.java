@@ -6,7 +6,7 @@ import java.util.List;
 
 public class Player implements Serializable {
     // TCP Port (Node ID)
-    public int id;
+    public  String id;
 
     public String name;
     public int chips;
@@ -16,7 +16,7 @@ public class Player implements Serializable {
     public List<Card> holeCards = new ArrayList<>();
     public boolean isActive = true;
 
-    public Player(int id, int startChips) {
+    public Player(String id, int startChips) {
         this.id = id;
         this.name = "Player " + id;
         this.chips = startChips;

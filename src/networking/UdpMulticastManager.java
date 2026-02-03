@@ -46,7 +46,11 @@ public class UdpMulticastManager {
                 String senderIp = packet.getAddress().getHostAddress();
                 //System.out.println("[UDP DEBUG] Received packet from " + senderIp + ":" + msg.tcpPort + " | Type: " + msg.type);
 
-                if (msg.tcpPort == myTcpPort && msg.sequenceNumber <= 0) continue;
+                if (msg.senderId != null &&
+                    msg.senderId.equals(context.nodeId) &&
+                    msg.sequenceNumber <= 0) {
+                        continue;
+                }
 
                 if (msg.type == GameMessage.Type.JOIN_REQUEST) {
                     context.tcp.connectToPeer(senderIp, msg.tcpPort);
@@ -61,7 +65,7 @@ public class UdpMulticastManager {
         try (MulticastSocket socket = new MulticastSocket()) {
             socket.setTimeToLive(NetworkConfig.MULTICAST_TTL);
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
-            GameMessage msg = new GameMessage(GameMessage.Type.JOIN_REQUEST, myTcpPort);
+            GameMessage msg = new GameMessage(GameMessage.Type.JOIN_REQUEST, myTcpPort, context.myIp);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ObjectOutputStream oos = new ObjectOutputStream(baos);

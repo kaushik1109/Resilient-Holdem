@@ -15,7 +15,7 @@ public class TcpMeshManager {
     private ServerSocket serverSocket;
     private boolean running = true;
     
-    private ConcurrentHashMap<Integer, Peer> peers = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Peer> peers = new ConcurrentHashMap<>();
 
     public TcpMeshManager(int port, NodeContext context) {
         this.myPort = port;
@@ -43,7 +43,7 @@ public class TcpMeshManager {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-            out.writeObject(new GameMessage(GameMessage.Type.HEARTBEAT, myPort));
+            out.writeObject(new GameMessage(GameMessage.Type.HEARTBEAT, myPort, context.myIp, "Pulse"));
             out.flush();
 
             new Thread(() -> listenToPeer(in, socket, out)).start();
@@ -51,14 +51,14 @@ public class TcpMeshManager {
     }
 
     private void listenToPeer(ObjectInputStream in, Socket socket, ObjectOutputStream out) {
-        int peerId = -1;
+        String peerId = null;
         try {
             while (running) {
                 GameMessage msg = (GameMessage) in.readObject();
                 
-                if (peerId == -1) {
-                    peerId = msg.tcpPort;
-                    peers.put(peerId, new Peer(socket.getInetAddress().getHostAddress(), peerId, socket, out));
+                if (peerId == null) {
+                    peerId = msg.senderId;
+                    peers.put(peerId, new Peer(peerId, socket, out));
                     context.onPeerConnected(peerId);
                 }
 
@@ -75,24 +75,32 @@ public class TcpMeshManager {
     }
 
     public void connectToPeer(String ip, int port) {
-        if (peers.containsKey(port)) return;
+        String peerId = ip + ":" + port;
+        if (peers.containsKey(peerId)) return;
         try {
             Socket socket = new Socket(ip, port);
             handleNewConnection(socket);
         } catch (IOException e) {
-            System.out.println("[TCP] Could not connect to peer " + ip + ":" + port);
+            System.out.println("[TCP] Could not connect to peer " + peerId);
         }
     }
 
-    public void sendNack(int targetPeerId, long sequenceNumber) {
-        sendToPeer(targetPeerId, new GameMessage(GameMessage.Type.NACK, myPort, String.valueOf(sequenceNumber)));
+    public void sendNack(String targetPeerId, long sequenceNumber) {
+        sendToPeer(targetPeerId,
+            new GameMessage(GameMessage.Type.NACK, myPort, context.myIp, String.valueOf(sequenceNumber))
+        );
     }
 
-    public void sendToPeer(int targetPeerId, GameMessage msg) {
+    public void sendToPeer(String targetPeerId, GameMessage msg) {
         Peer peer = peers.get(targetPeerId);
         if (peer == null) {
-            connectToPeer("localhost", targetPeerId);
-            try { Thread.sleep(200); } catch(Exception e){}
+            String[] parts = targetPeerId.split(":");
+            String ip = parts[0];
+            int port = Integer.parseInt(parts[1]);
+
+            connectToPeer(ip, port);
+
+            try { Thread.sleep(200); } catch (Exception e) {}
             peer = peers.get(targetPeerId);
         }
 
@@ -112,8 +120,8 @@ public class TcpMeshManager {
         peers.values().forEach(p -> sendToPeer(p.peerId, msg));
     }
 
-    public synchronized void closeConnection(int peerId) {
-        if (peerId != -1 && peers.containsKey(peerId)) {
+    public synchronized void closeConnection(String peerId) {
+        if (peerId != null && peers.containsKey(peerId)) {
             Peer p = peers.remove(peerId);
             try { p.socket.close(); } catch (Exception e) {}
         }
@@ -124,7 +132,7 @@ public class TcpMeshManager {
             try {
                 Thread.sleep(HEARTBEAT_INTERVAL);
                 
-                GameMessage hb = new GameMessage(GameMessage.Type.HEARTBEAT, myPort);
+                GameMessage hb = new GameMessage(GameMessage.Type.HEARTBEAT, myPort, context.myIp);
                 broadcastToAll(hb);
             } catch (InterruptedException e) {}
         }
@@ -146,16 +154,16 @@ public class TcpMeshManager {
         }
     }
 
-    public boolean isPeerAlive(int peerId) {
+    public boolean isPeerAlive(String peerId) {
         return peers.containsKey(peerId);
     }
     
-    public long getPeerLastSeen(int peerId) {
+    public long getPeerLastSeen(String peerId) {
         Peer p = peers.get(peerId);
         return (p != null) ? p.lastSeenTimestamp : 0;
     }
 
-    public Set<Integer> getConnectedPeerIds() {
+    public Set<String> getConnectedPeerIds() {
         return peers.keySet();
     }
 }

@@ -1,5 +1,8 @@
 package game;
 
+import java.net.InetAddress;
+import java.util.Objects;
+
 import consensus.ElectionManager;
 import consensus.HoldBackQueue;
 import consensus.Sequencer;
@@ -12,6 +15,9 @@ public class NodeContext {
     public final int myPort;
 
     public boolean dropNext;
+    public final String myIp;
+    public final String nodeId;     // "ip:port"
+    public final int nodeHash;
     
     public final TcpMeshManager tcp;
     public final UdpMulticastManager udp;
@@ -25,17 +31,29 @@ public class NodeContext {
     public NodeContext() {
         this.myPort = NetworkConfig.MY_PORT;
 
+        String ipTemp;
+        try {
+            ipTemp = InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            ipTemp = "unknown";
+        }
+
+        this.myIp = ipTemp;
+        this.nodeId = myIp + ":" + myPort;
+        this.nodeHash = Objects.hash(nodeId);
+
         this.clientGame = new ClientGameState();
         this.queue = new HoldBackQueue();
         
         this.tcp = new TcpMeshManager(myPort, this); 
         this.udp = new UdpMulticastManager(myPort, this);
         
-        this.election = new ElectionManager(myPort, tcp);
+        this.election = new ElectionManager(this, tcp);
         this.sequencer = new Sequencer(udp, tcp);
 
         queue.setQueueAttributes(tcp, clientGame, this::handleQueueDelivery);
     }
+
 
     public void start() {
         tcp.start();
@@ -56,11 +74,11 @@ public class NodeContext {
                 break;
 
             case LEAVE:
-                onPeerDisconnected(msg.tcpPort);
+                onPeerDisconnected(msg.senderId);
                 break;
                 
             case NACK:
-                sequencer.handleNack(msg, msg.tcpPort);
+                sequencer.handleNack(msg, msg.senderId);
                 break;
 
             case ELECTION:
@@ -69,10 +87,10 @@ public class NodeContext {
                 break;
 
             case COORDINATOR:
-                election.currentLeaderId = msg.tcpPort;
-                queue.setLeaderId(msg.tcpPort);
+                election.currentLeaderId = msg.senderId;
+                queue.setLeaderId(msg.senderId);
                 
-                if (msg.tcpPort == myPort) {
+                if (msg.senderId.equals(nodeId)) {
                     System.out.println("[Context] Leadership passed to me");
                     
                     PokerTable loadedTable = TexasHoldem.deserializeState(msg.payload);
@@ -120,17 +138,17 @@ public class NodeContext {
 
     private void handleQueueDelivery(GameMessage msg) {
         if (election.iAmLeader && serverGame != null && msg.type == GameMessage.Type.PLAYER_ACTION) {
-            serverGame.processAction(msg.tcpPort, msg.payload);
+            serverGame.processAction(msg.senderId, msg.payload);
         }
     }
 
-    public void onPeerConnected(int peerId) {
+    public void onPeerConnected(String peerId) {
         if (election.iAmLeader && serverGame != null) {
             serverGame.addPlayer(peerId);
         }
     }
 
-    public void onPeerDisconnected(int peerId) {
+    public void onPeerDisconnected(String peerId) {
         System.err.println("[Context] Peer " + peerId + " disconnected/crashed");
         tcp.closeConnection(peerId);
 
@@ -149,7 +167,7 @@ public class NodeContext {
         this.serverGame = new TexasHoldem(this);
         
         System.out.println("[Context] Backfilling existing peers into the game");
-        for (int peerId : tcp.getConnectedPeerIds()) {
+        for (String peerId : tcp.getConnectedPeerIds()) {
             this.serverGame.addPlayer(peerId);
         }
     }
