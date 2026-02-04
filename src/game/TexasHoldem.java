@@ -4,6 +4,10 @@ import networking.GameMessage;
 import java.io.*;
 import java.util.Base64;
 
+import static util.ConsolePrint.printError;
+import static util.ConsolePrint.printGame;
+import static util.ConsolePrint.printNormal;
+
 public class TexasHoldem {
     private final NodeContext context;
     private final PokerTable table; 
@@ -19,23 +23,26 @@ public class TexasHoldem {
     public TexasHoldem(NodeContext context, PokerTable loadedTable) {
         this.context = context;
         this.table = loadedTable;
+        context.sequencer.resetSeqId();
         
-        boolean removedSelf = table.players.removeIf(p -> p.id.equals(context.nodeId));
+        boolean removedSelf = table.players.removeIf(p -> p.id.equals(context.myId));
         if (removedSelf) {
-            System.out.println("[Game] I (Node " + context.nodeId + ") am now Dealer. Leaving the table.");
+            printGame("[Game] I (Node " + context.myId + ") am now Dealer. Leaving the table.");
         }
 
-        System.out.println("[Game] Reconciling player roster");
+        printGame("[Game] Reconciling player roster");
+        table.players.clear();
         for (String peerId : context.tcp.getConnectedPeerIds()) {
             addPlayer(peerId);
         }
 
         this.gameInProgress = true;
         context.queue.forceSync(context.sequencer.getCurrentSeqId());
+        printNormal("Game State Loaded. Type 'start' to begin next hand");
     }
 
     public void addPlayer(String playerId) {
-        if (playerId.equals(context.nodeId)) return;
+        if (playerId.equals(context.myId)) return;
         
         if (table.players.stream().anyMatch(p -> p.id.equals(playerId))) return;
 
@@ -46,7 +53,7 @@ public class TexasHoldem {
             newPlayer.folded = true;
             sendStateDump(playerId);
         } else {
-            System.out.println("[Game] Player " + playerId + " added to table.");
+            printGame("[Game] Player " + playerId + " added to table.");
         }
         
         long currentSeq = context.sequencer.getCurrentSeqId();
@@ -57,7 +64,7 @@ public class TexasHoldem {
 
     public void startNewRound() {
         if (table.players.size() < 2) {
-            System.out.println("[Game] Cannot start. Need at least 2 players (excluding Dealer). Current: " + table.players.size());
+            printGame("[Game] Cannot start. Need at least 2 players (excluding Dealer). Current: " + table.players.size());
             return;
         }
         
@@ -74,10 +81,10 @@ public class TexasHoldem {
             p.holeCards.add(c1);
             p.holeCards.add(c2);
             
-            context.tcp.sendToPeer(p.id, new GameMessage(GameMessage.Type.YOUR_HAND, context.myPort, context.myIp, c1 + "," + c2));
+            context.tcp.sendToPeer(p.id, new GameMessage(GameMessage.Type.YOUR_HAND, c1 + "," + c2));
         }
         
-        broadcastState("New Round! Dealer Node is " + context.nodeId + ". Button is Player " + table.players.get(table.dealerIndex).id);
+        broadcastState("New Round! Dealer Node is " + context.myId + ". Button is Player " + table.players.get(table.dealerIndex).id);
         notifyTurn();
     }
     
@@ -94,20 +101,21 @@ public class TexasHoldem {
     private void notifyTurn() {
         Player next = table.players.get(table.currentPlayerIndex);
         broadcastState("Pot: " + table.pot + " | Turn: Player " + next.id + " (To Call: " + (table.currentHighestBet - next.currentBet) + ")");
+        try { Thread.sleep(500); } catch (Exception e) {}
         sendPrivateState(next.id, "It is your turn!");
     }
 
     public void handleClientRequest(GameMessage msg) {
         if (!gameInProgress) {
-            sendPrivateState(msg.senderId, "Game not started.");
+            sendPrivateState(msg.getSenderId(), "Game not started.");
             return;
         }
 
         Player current = table.players.get(table.currentPlayerIndex);
         
-        if (!current.id.equals(msg.senderId)) {
-            System.out.println("[Server] Rejecting out-of-turn move from " + msg.senderId);
-            sendPrivateState(msg.senderId, "Not your turn! Current turn: " + current.id);
+        if (!current.id.equals(msg.getSenderId())) {
+            printError("[Server] Rejecting out-of-turn move from " + msg.getSenderId());
+            sendPrivateState(msg.getSenderId(), "Not your turn! Current turn: " + current.id);
             return;
         }
 
@@ -118,11 +126,6 @@ public class TexasHoldem {
         if (!gameInProgress) return;
 
         Player current = table.players.get(table.currentPlayerIndex);
-        
-        if (!current.id.equals(playerId)) {
-            System.out.println("[Server] Ignored action from " + playerId + " (Not their turn)");
-            return;
-        }
 
         String[] parts = command.split(" ");
         String type = parts[0].toLowerCase();
@@ -284,25 +287,25 @@ public class TexasHoldem {
     }
 
     private void dealCommunity(int count) {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder communityCards = new StringBuilder();
         for (int i = 0; i < count; i++) {
             Card c = table.deck.deal();
             table.communityCards.add(c);
-            sb.append(c.toString()).append(",");
+            communityCards.append(c.toString()).append(",");
         }
         
-        context.sequencer.multicastAction(new GameMessage(GameMessage.Type.COMMUNITY_CARDS, context.myPort, context.myIp, sb.toString()));
+        context.sequencer.multicastAction(new GameMessage(GameMessage.Type.COMMUNITY_CARDS, communityCards.toString()));
     }
 
     private void performShowdown() {
-        System.out.println(">>> SHOWDOWN");
+        System.out.println("SHOWDOWN");
         
         Player winner = null;
         int bestScore = -1;
         
         String winHandDescription = ""; 
 
-        StringBuilder summary = new StringBuilder(">>> SHOWDOWN RESULTS\n");
+        StringBuilder summary = new StringBuilder("SHOWDOWN RESULTS\n");
 
         for (Player p : table.players) {
             if (p.folded) continue;
@@ -324,7 +327,7 @@ public class TexasHoldem {
         if (winner != null) {
             winner.chips += table.pot;
             summary.append("\n").append("WINNER: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot);
-            context.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, context.myPort, context.myIp, summary.toString()));
+            context.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, summary.toString()));
         }
         
         passLeadership();
@@ -338,7 +341,7 @@ public class TexasHoldem {
 
         if (p == null) return; 
 
-        System.err.println("[Game] Handling crash for Player " + playerId);
+        printError("[Game] Handling crash for Player " + playerId);
 
         p.isActive = false;
         p.folded = true; 
@@ -346,7 +349,7 @@ public class TexasHoldem {
         broadcastState("Player " + playerId + " disconnected and is Auto-Folded");
 
         if (table.players.indexOf(p) == table.currentPlayerIndex) {
-            System.err.println("[Game] Crashed player had the turn. Forcing fold");
+            printError("[Game] Crashed player had the turn. Forcing fold");
             processAction(playerId, "fold");
         }
         
@@ -363,7 +366,7 @@ public class TexasHoldem {
             winner.chips += table.pot;
 
             context.sequencer.multicastAction(new GameMessage(
-                GameMessage.Type.SHOWDOWN, context.myPort, context.myIp, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot
+                GameMessage.Type.SHOWDOWN, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot
             ));
         }
 
@@ -371,7 +374,7 @@ public class TexasHoldem {
     }
 
     private void passLeadership() {
-        System.out.println("[Game] Hand finished. Rotating Dealer");
+        printGame("[Game] Hand finished. Rotating Dealer");
         
         String stateData = getSerializedState();
         
@@ -403,9 +406,7 @@ public class TexasHoldem {
     }
 
     private void broadcastState(String msg) {
-        context.sequencer.multicastAction(new GameMessage(
-            GameMessage.Type.GAME_STATE, context.myPort, context.myIp, msg
-        ));
+        context.sequencer.multicastAction(new GameMessage(GameMessage.Type.GAME_STATE, msg));
     }
     
     private void sendPrivateState(String targetId, String msg) {
@@ -413,6 +414,6 @@ public class TexasHoldem {
     }
     
     private void sendPrivateMessage(GameMessage.Type type, String targetId, String msg) {
-        context.tcp.sendToPeer(targetId, new GameMessage(type, context.myPort, context.myIp, msg));
+        context.tcp.sendToPeer(targetId, new GameMessage(type, msg));
     }
 }

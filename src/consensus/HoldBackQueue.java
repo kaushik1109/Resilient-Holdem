@@ -7,6 +7,9 @@ import java.util.PriorityQueue;
 import java.util.Comparator;
 import java.util.function.Consumer;
 
+import static util.ConsolePrint.printError;
+import static util.ConsolePrint.printElection;
+
 public class HoldBackQueue {
     private PriorityQueue<GameMessage> queue = new PriorityQueue<>(
         Comparator.comparingLong(msg -> msg.sequenceNumber)
@@ -54,7 +57,7 @@ public class HoldBackQueue {
         try {
             while (!queue.isEmpty()) {
                 GameMessage head = queue.peek();
-                System.out.println("[Queue] Processing #" + head.sequenceNumber + ", expecting #" + nextExpectedSeq);
+                printElection("[Queue] Processing #" + head.sequenceNumber + ", expecting #" + nextExpectedSeq);
 
                 if (head.sequenceNumber == nextExpectedSeq) {
                     queue.poll();
@@ -79,19 +82,14 @@ public class HoldBackQueue {
     }
     
     private void sendNack(long missingSeq) {
-        System.out.println("[Queue] Sending NACK for #" + missingSeq);
+        printError("[Queue] Sending NACK for #" + missingSeq);
         tcpLayer.sendNack(leaderId, missingSeq);
     }
 
     public synchronized void forceSync(long catchUpSeq) {
-        // Jump the counter to what the Leader tells us
-        // We add 1 because the Leader sends the "Current" ID (e.g., 50), so we want to be ready for the NEXT one (51).
+        printElection("[Queue] Syncing queue to Sequence #" + catchUpSeq);
         this.nextExpectedSeq = catchUpSeq + 1;
-        
-        // Clear any old junk we might have buffered while waiting
         queue.clear(); 
-        
-        System.out.println("[Queue] Synced! Jumped to Sequence #" + nextExpectedSeq);
     }
 
     private void deliverToApp(GameMessage msg) {

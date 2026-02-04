@@ -1,7 +1,7 @@
 #!/bin/bash
 
 mkdir -p bin
-javac -d bin src/networking/*.java src/consensus/*.java src/game/*.java src/Main.java
+javac -d bin src/networking/*.java src/consensus/*.java src/game/*.java src/util/*.java src/Main.java
 
 if [ $? -eq 0 ]; then
     echo "Compilation Successful. Launching Nodes"

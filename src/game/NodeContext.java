@@ -1,6 +1,5 @@
 package game;
 
-import java.net.InetAddress;
 import java.util.Objects;
 
 import consensus.ElectionManager;
@@ -11,13 +10,16 @@ import networking.UdpMulticastManager;
 import networking.GameMessage;
 import networking.NetworkConfig;
 
-public class NodeContext {
-    public final int myPort;
+import static util.ConsolePrint.printError;
+import static util.ConsolePrint.printGame;
 
+public class NodeContext {
     public boolean dropNext;
-    public final String myIp;
-    public final String nodeId;     // "ip:port"
-    public final int nodeHash;
+
+    // This will always be of the form ip:port
+    public final String myId;
+
+    public final int myIdHash;
     
     public final TcpMeshManager tcp;
     public final UdpMulticastManager udp;
@@ -29,31 +31,20 @@ public class NodeContext {
     private TexasHoldem serverGame;
 
     public NodeContext() {
-        this.myPort = NetworkConfig.MY_PORT;
-
-        String ipTemp;
-        try {
-            ipTemp = InetAddress.getLocalHost().getHostAddress();
-        } catch (Exception e) {
-            ipTemp = "unknown";
-        }
-
-        this.myIp = ipTemp;
-        this.nodeId = myIp + ":" + myPort;
-        this.nodeHash = Objects.hash(nodeId);
+        this.myId = NetworkConfig.MY_IP + ":" + NetworkConfig.MY_PORT;
+        this.myIdHash = Objects.hash(myId);
 
         this.clientGame = new ClientGameState();
         this.queue = new HoldBackQueue();
         
-        this.tcp = new TcpMeshManager(myPort, this); 
-        this.udp = new UdpMulticastManager(myPort, this);
+        this.tcp = new TcpMeshManager(this); 
+        this.udp = new UdpMulticastManager(this);
         
         this.election = new ElectionManager(this, tcp);
         this.sequencer = new Sequencer(udp, tcp);
 
         queue.setQueueAttributes(tcp, clientGame, this::handleQueueDelivery);
     }
-
 
     public void start() {
         tcp.start();
@@ -63,22 +54,17 @@ public class NodeContext {
     }
 
     public void routeMessage(GameMessage msg) {
-        if (dropNext && msg.sequenceNumber > 0) {
-            System.err.println("[Context] Simulating omission. Dropped Msg #" + msg.sequenceNumber);
-            dropNext = false;
-            return;
-        }
 
         switch (msg.type) {
             case HEARTBEAT:
                 break;
 
             case LEAVE:
-                onPeerDisconnected(msg.senderId);
+                onPeerDisconnected(msg.getSenderId());
                 break;
                 
             case NACK:
-                sequencer.handleNack(msg, msg.senderId);
+                sequencer.handleNack(msg, msg.getSenderId());
                 break;
 
             case ELECTION:
@@ -86,28 +72,28 @@ public class NodeContext {
                 election.handleMessage(msg);
                 break;
 
+            case HANDOVER:
+                printGame("[Context] Leadership passed to me");
+                PokerTable loadedTable = TexasHoldem.deserializeState(msg.payload);
+                election.declareVictory(true);
+                createServerGame(loadedTable);
+
             case COORDINATOR:
-                election.currentLeaderId = msg.senderId;
-                queue.setLeaderId(msg.senderId);
-                
-                if (msg.senderId.equals(nodeId)) {
-                    System.out.println("[Context] Leadership passed to me");
-                    
-                    PokerTable loadedTable = TexasHoldem.deserializeState(msg.payload);
-                    createServerGame(loadedTable);
-                    this.election.iAmLeader = true;
-                    
-                    System.out.println(">>> Game State Loaded. Type 'start' to begin next hand");
-                } else {
-                    election.handleMessage(msg);
-                }
-                break;
+                election.currentLeaderId = msg.getSenderId();
+                queue.setLeaderId(msg.getSenderId());
+                election.handleMessage(msg);
 
             case ORDERED_MULTICAST:
             case PLAYER_ACTION:
             case GAME_STATE:
             case COMMUNITY_CARDS:
             case SHOWDOWN:
+                if (dropNext) {
+                    printError("[Context] Simulating omission. Dropped Msg #" + msg.sequenceNumber);
+                    dropNext = false;
+                    return;
+                }
+
                 if (msg.sequenceNumber <= 0) {
                     if (msg.type == GameMessage.Type.GAME_STATE) {
                          clientGame.onReceiveState(msg.payload);
@@ -132,13 +118,13 @@ public class NodeContext {
                 break;
 
             default:
-                System.out.println("[Context] Unknown Message Type: " + msg.type);
+                printError("[Context] Unknown Message Type: " + msg.type);
         }
     }
 
     private void handleQueueDelivery(GameMessage msg) {
         if (election.iAmLeader && serverGame != null && msg.type == GameMessage.Type.PLAYER_ACTION) {
-            serverGame.processAction(msg.senderId, msg.payload);
+            serverGame.processAction(msg.getSenderId(), msg.payload);
         }
     }
 
@@ -149,7 +135,7 @@ public class NodeContext {
     }
 
     public void onPeerDisconnected(String peerId) {
-        System.err.println("[Context] Peer " + peerId + " disconnected/crashed");
+        printError("[Context] Peer " + peerId + " disconnected/crashed");
         tcp.closeConnection(peerId);
 
         if (election != null) {
@@ -165,11 +151,6 @@ public class NodeContext {
 
     public void createServerGame() {
         this.serverGame = new TexasHoldem(this);
-        
-        System.out.println("[Context] Backfilling existing peers into the game");
-        for (String peerId : tcp.getConnectedPeerIds()) {
-            this.serverGame.addPlayer(peerId);
-        }
     }
 
     public void createServerGame(PokerTable loadedTable) {

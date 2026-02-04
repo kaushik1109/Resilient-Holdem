@@ -2,7 +2,8 @@ package game;
 
 import java.util.*;
 import networking.GameMessage;
-import networking.NetworkConfig;
+import static util.ConsolePrint.printError;
+import static util.ConsolePrint.printBold;
 
 public class ClientGameState {
     public List<String> myHand = new ArrayList<>();
@@ -12,40 +13,39 @@ public class ClientGameState {
     public void onReceiveHand(String payload) {
         myHand.clear();
         Collections.addAll(myHand, payload.split(","));
-        System.out.println(">>> MY HAND: " + myHand);
+        System.out.println("My Hand: " + myHand);
     }
     
     public void onReceiveCommunity(String payload) {
         communityCards.clear();
         Collections.addAll(communityCards, payload.split(","));
-        System.out.println(">>> BOARD: " + communityCards);
+        System.out.println("Board: " + communityCards);
     }
     
     public void onReceiveState(String msg) {
         this.status = msg;
-        System.out.println(">>> GAME INFO: " + msg);
+        System.out.println(msg);
     }
     
     public void printStatus(String nodeId, String leaderId) {
-        System.out.println("\n>>> CURRENT STATUS");
-        System.out.println(">>> NODE: " + nodeId);
-        System.out.println(">>> LEADER: " + leaderId);
+        System.out.println("STATUS");
+        System.out.println("My ID: " + nodeId);
+        System.out.println("Leader: " + leaderId);
         if (myHand.isEmpty()) {
-             System.out.println(">>> HAND: [Spectating / Folded]");
+             System.out.println("My Hand: [Spectating / Folded]");
         } else {
-             System.out.println(">>> HAND: " + myHand);
+             System.out.println("My Hand: " + myHand);
         }
         
-        System.out.println(">>> BOARD: " + communityCards);
-        System.out.println(">>> GAME STATUS:  " + status);
+        System.out.println("Board: " + communityCards);
+        System.out.println("Status: " + status);
     }
 
     public static void printHelp() {
-        System.out.println("\nCOMMANDS: 'start' (Leader), 'bet / raise <amt>', 'call', 'fold', 'check', 'allin', 'quit', 'dropnext', 'help'");
+        printBold("\nCommands: 'start' (Leader), 'bet / raise <amt>', 'call', 'fold', 'check', 'allin', 'quit', 'dropnext', 'help'");
     }
 
     public static void handleUserCommands(NodeContext node) {
-        String payload;
         GameMessage actionMsg;
 
         try (Scanner scanner = new Scanner(System.in)) {
@@ -67,56 +67,56 @@ public class ClientGameState {
 
                                 node.getServerGame().startNewRound();
                             } else {
-                                System.out.println("Only the Leader can start the game.");
+                                printError( "Only the Leader can start the game.");
                             }
                             break;
 
                         case "bet": case "raise":
                             if (parts.length < 2 || !parts[1].matches("\\d+")) {
-                                System.out.println("Enter a number to bet / raise. eg. bet 200");
+                                printError( "Enter a number to bet / raise. eg. bet 200");
                                 break;
                             }
                             
-                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, node.myPort, node.myIp, cmd + " " + parts[1]);
+                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, cmd + " " + parts[1]);
 
                             if (node.election.iAmLeader) {
                                 node.sequencer.multicastAction(actionMsg);
                             } else if (node.election.currentLeaderId != null) {
                                 node.tcp.sendToPeer(node.election.currentLeaderId, actionMsg);
                             } else {
-                                System.out.println("No Leader found yet.");
+                                printError( "No Leader found yet.");
                             }
                             break;
                         
                         case "fold": case "check": case "call": case "allin":
                             if (parts.length > 1) {
-                                System.out.println("Enter only the command for fold / call / check / allin");
+                                printError( "Enter only the command for fold / call / check / allin");
                                 break;
                             }
                             
-                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, node.myPort, node.myIp, cmd);
+                            actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, cmd);
 
                             if (node.election.iAmLeader) {
                                 node.sequencer.multicastAction(actionMsg);
                             } else if (node.election.currentLeaderId != null) {
                                 node.tcp.sendToPeer(node.election.currentLeaderId, actionMsg);
                             } else {
-                                System.out.println("No Leader found yet.");
+                                printError( "No Leader found yet.");
                             }
                             break;
 
                         case "status":
-                            node.clientGame.printStatus(node.nodeId, node.election.currentLeaderId);
+                            node.clientGame.printStatus(node.myId, node.election.currentLeaderId);
                             break;
                             
                         case "quit":
-                            node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE, node.myPort, node.myIp));
+                            node.udp.sendMulticast(new GameMessage(GameMessage.Type.LEAVE));
                             System.exit(0);
                             break;
                         
                         case "dropnext":
                             node.dropNext = true;
-                            System.out.println("The next game message will be dropped");
+                            printError("The next game message will be dropped.");
                             break;
                         
                         case "help":
@@ -125,10 +125,10 @@ public class ClientGameState {
                             break;
 
                         default:
-                            System.out.println("Unknown command.");
+                            printError( "Unknown command.");
                     }
                 } catch (Exception e) {
-                    System.out.println("Error processing command: " + e.getMessage());
+                    printError( "Error processing command: " + e.getMessage());
                 }
             }
         }

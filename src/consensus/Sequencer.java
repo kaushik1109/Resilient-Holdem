@@ -7,6 +7,9 @@ import networking.TcpMeshManager;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static util.ConsolePrint.printError;
+import static util.ConsolePrint.printElection;
+
 public class Sequencer {
     private UdpMulticastManager udpLayer;
     
@@ -25,6 +28,10 @@ public class Sequencer {
         return globalSequenceId.get();
     }
 
+    public void resetSeqId() {
+        globalSequenceId = new AtomicLong(0);
+    }
+
     public void multicastAction(GameMessage originalRequest) {
         long seqId = globalSequenceId.incrementAndGet();
 
@@ -33,10 +40,10 @@ public class Sequencer {
             typeToSend = GameMessage.Type.PLAYER_ACTION;
         }
 
-        GameMessage orderedMsg = new GameMessage(typeToSend, originalRequest.tcpPort, originalRequest.senderIp, originalRequest.payload, seqId);
+        GameMessage orderedMsg = new GameMessage(typeToSend, originalRequest.payload, seqId);
 
         historyBuffer.put(seqId, orderedMsg);
-        System.out.println("[Sequencer] Broadcasting #" + seqId + " (" + typeToSend + "): " + originalRequest.payload);
+        printElection("[Sequencer] Multicasting #" + seqId + " (" + typeToSend + ").");
 
         udpLayer.sendMulticast(orderedMsg); 
     }
@@ -44,16 +51,16 @@ public class Sequencer {
     public void handleNack(GameMessage nackMsg, String requestorId) {
         try {
             long missingSeq = Long.parseLong(nackMsg.payload);
-            System.out.println("[Sequencer] Node " + requestorId + "requesting retransmission of #" + missingSeq);
+            printElection("[Sequencer] Node " + requestorId + "requesting retransmission of #" + missingSeq);
             
             if (historyBuffer.containsKey(missingSeq)) {
                 GameMessage oldMsg = historyBuffer.get(missingSeq);
                 
-                System.out.println("[Sequencer] Resending #" + missingSeq + " to Node " + requestorId);
+                printElection("[Sequencer] Resending #" + missingSeq + " to Node " + requestorId);
                 
                 tcpLayer.sendToPeer(requestorId, oldMsg);
             } else {
-                System.out.println("[Sequencer] Cannot repair #" + missingSeq + " (Not in history)");
+                printError("[Sequencer] Cannot repair #" + missingSeq + " (Not in history)");
             }
         } catch (Exception e) {
             e.printStackTrace();

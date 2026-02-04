@@ -5,7 +5,7 @@ import java.net.Socket;
 import java.util.Objects;
 
 public class Peer {
-    public String peerId;          // EXACTLY "ip:port"
+    public String peerId;
     public Socket socket;
     public ObjectOutputStream out;
     public int peerHash;

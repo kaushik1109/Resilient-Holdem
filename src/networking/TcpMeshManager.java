@@ -6,6 +6,9 @@ import java.net.*;
 import java.util.Set;
 import java.util.concurrent.*;
 
+import static util.ConsolePrint.printError;
+import static util.ConsolePrint.printNetworking;
+
 public class TcpMeshManager {
     private static final int HEARTBEAT_INTERVAL = 2000;
     private static final int TIMEOUT_THRESHOLD = 6000;
@@ -17,8 +20,8 @@ public class TcpMeshManager {
     
     private ConcurrentHashMap<String, Peer> peers = new ConcurrentHashMap<>();
 
-    public TcpMeshManager(int port, NodeContext context) {
-        this.myPort = port;
+    public TcpMeshManager(NodeContext context) {
+        this.myPort = NetworkConfig.MY_PORT;
         this.context = context;
     }
 
@@ -31,7 +34,7 @@ public class TcpMeshManager {
     private void startServer() {
         try {
             serverSocket = new ServerSocket(myPort);
-            System.out.println("[TCP] Server listening on port " + myPort);
+            printNetworking("[TCP] Listening on port " + myPort);
             while (running) {
                 handleNewConnection(serverSocket.accept());
             }
@@ -43,7 +46,7 @@ public class TcpMeshManager {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-            out.writeObject(new GameMessage(GameMessage.Type.HEARTBEAT, myPort, context.myIp, "Pulse"));
+            out.writeObject(new GameMessage(GameMessage.Type.HEARTBEAT));
             out.flush();
 
             new Thread(() -> listenToPeer(in, socket, out)).start();
@@ -56,8 +59,12 @@ public class TcpMeshManager {
             while (running) {
                 GameMessage msg = (GameMessage) in.readObject();
                 
+                if (msg.type != GameMessage.Type.HEARTBEAT) {
+                    printNetworking("[TCP] Received message from " + msg.getSenderId() + " of type: " + msg.type);
+                }
+
                 if (peerId == null) {
-                    peerId = msg.senderId;
+                    peerId = msg.getSenderId();
                     peers.put(peerId, new Peer(peerId, socket, out));
                     context.onPeerConnected(peerId);
                 }
@@ -77,17 +84,20 @@ public class TcpMeshManager {
     public void connectToPeer(String ip, int port) {
         String peerId = ip + ":" + port;
         if (peers.containsKey(peerId)) return;
+        if (ip.equals(NetworkConfig.MY_IP) && port == myPort) return;
+
         try {
             Socket socket = new Socket(ip, port);
+            printNetworking("[TCP] Connecting to " + peerId);
             handleNewConnection(socket);
         } catch (IOException e) {
-            System.out.println("[TCP] Could not connect to peer " + peerId);
+            printError("[TCP] Could not connect to peer " + peerId);
         }
     }
 
     public void sendNack(String targetPeerId, long sequenceNumber) {
         sendToPeer(targetPeerId,
-            new GameMessage(GameMessage.Type.NACK, myPort, context.myIp, String.valueOf(sequenceNumber))
+            new GameMessage(GameMessage.Type.NACK, String.valueOf(sequenceNumber))
         );
     }
 
@@ -104,16 +114,16 @@ public class TcpMeshManager {
             peer = peers.get(targetPeerId);
         }
 
-        if (peer != null) {
-            try {
-                synchronized(peer.out) {
-                    peer.out.writeObject(msg);
-                    peer.out.flush();
-                }
-            } catch (IOException e) {
-                peers.remove(targetPeerId);
+        try {       
+            synchronized(peer.out) {
+                peer.out.writeObject(msg);
+                peer.out.flush();
             }
-        }
+        } catch (IOException e) {
+            peers.remove(targetPeerId);
+            context.onPeerDisconnected(targetPeerId);
+            printError("Could not send message to peer " + targetPeerId);
+        }   
     }
 
     public void broadcastToAll(GameMessage msg) {
@@ -132,7 +142,7 @@ public class TcpMeshManager {
             try {
                 Thread.sleep(HEARTBEAT_INTERVAL);
                 
-                GameMessage hb = new GameMessage(GameMessage.Type.HEARTBEAT, myPort, context.myIp);
+                GameMessage hb = new GameMessage(GameMessage.Type.HEARTBEAT);
                 broadcastToAll(hb);
             } catch (InterruptedException e) {}
         }
@@ -146,7 +156,7 @@ public class TcpMeshManager {
 
                 for (Peer peer : peers.values()) {
                     if (now - peer.lastSeenTimestamp > TIMEOUT_THRESHOLD) {
-                        System.err.println("[Heartbeat] Peer " + peer.peerId + " timed out!");
+                        printError("[TCP] Peer " + peer.peerId + " timed out!");
                         context.onPeerDisconnected(peer.peerId);
                     }
                 }

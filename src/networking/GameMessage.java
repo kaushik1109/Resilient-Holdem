@@ -9,16 +9,15 @@ public class GameMessage implements Serializable {
     public enum Type {
         JOIN_REQUEST,
         HEARTBEAT,
-        ELECTION, ELECTION_OK, COORDINATOR,
+        ELECTION, 
+        ELECTION_OK, 
+        COORDINATOR,
+        HANDOVER,
         SYNC,
-
         LEAVE,
-        
         ACTION_REQUEST,
         ORDERED_MULTICAST,
-
         NACK,
-
         YOUR_HAND,
         COMMUNITY_CARDS,
         PLAYER_ACTION,
@@ -27,32 +26,34 @@ public class GameMessage implements Serializable {
     }
 
     public Type type;
-    public int tcpPort;
     public String senderIp;
     public int senderPort;
-    public String senderId;
-    public int senderHash;
 
     public String payload;
     
     public long sequenceNumber = -1; 
 
-    public GameMessage(Type type, int tcpPort, String senderIp) {
+    public GameMessage(Type type) {
         this.type = type;
-        this.tcpPort = tcpPort;
-        this.senderIp = senderIp;
-        this.senderPort = tcpPort;
-        this.senderId = senderIp + ":" + tcpPort;
-        this.senderHash = Objects.hash(senderId);
+        this.senderIp = NetworkConfig.MY_IP;
+        this.senderPort = NetworkConfig.MY_PORT;
     }
 
-    public GameMessage(Type type, int tcpPort, String senderIp, String payload) {
-        this(type, tcpPort, senderIp);
+    public GameMessage(Type type, String payload) {
+        this(type);
         this.payload = payload;
     }
 
-    public GameMessage(Type type, int tcpPort, String senderIp, String payload, long seq) {
-        this(type, tcpPort, senderIp, payload);
+    public GameMessage(Type type, String payload, long seq) {
+        this(type, payload);
         this.sequenceNumber = seq;
+    }
+
+    public String getSenderId() {
+        return senderIp + ":" + senderPort;
+    }
+
+    public int getSenderHash() {
+        return Objects.hash(getSenderId());
     }
 }
