@@ -2,6 +2,9 @@ package game;
 
 import java.io.Serializable;
 
+/**
+ * Represents a playing card with a rank and suit, used in the poker game.
+ */
 public class Card implements Serializable {
     public enum Suit { HEARTS, DIAMONDS, CLUBS, SPADES }
     public enum Rank { 

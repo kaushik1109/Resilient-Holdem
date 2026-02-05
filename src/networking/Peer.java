@@ -4,6 +4,9 @@ import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.Objects;
 
+/**
+ * Represents a peer in the TCP mesh network, encapsulating connection details and state.
+ */
 public class Peer {
     public String peerId;
     public Socket socket;

@@ -3,8 +3,11 @@ package game;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Evaluates the strength of a player's hand in Texas Hold'em poker based on their hole cards and the community cards.
+ * Provides a scoring mechanism to rank hands and determine winners.
+ */
 public class HandEvaluator {
-
     public enum HandRank {
         HIGH_CARD(1), PAIR(2), TWO_PAIR(3), TRIPS(4), 
         STRAIGHT(5), FLUSH(6), FULL_HOUSE(7), QUADS(8), STRAIGHT_FLUSH(9);
@@ -13,8 +16,12 @@ public class HandEvaluator {
         HandRank(int v) { this.value = v; }
     }
 
-    // Returns a numeric score: (HandRank * 1,000,000) + HighCardValue
-    // Example: Pair of Kings > Pair of 2s
+    /**
+     * Evaluates the best hand rank from the given hole cards and community cards.
+     * @param hole The player's hole cards.
+     * @param community The community cards on the table.
+     * @return An integer score representing the hand rank and kicker.
+     */
     public static int evaluate(List<Card> hole, List<Card> community) {
         List<Card> all = new ArrayList<>();
         all.addAll(hole);
@@ -47,6 +54,12 @@ public class HandEvaluator {
         return HandRank.HIGH_CARD.value * 1000000 + all.get(0).rank.value;
     }
 
+    /**
+     * Helper method to get the highest rank for a given count (e.g., highest rank of pairs or trips).
+     * @param counts The map of card ranks to their counts.
+     * @param count The count of cards (e.g., 2 for a pair, 3 for trips).
+     * @return The highest rank value among cards with the given count.
+     */
     private static int getHighRank(Map<Card.Rank, Long> counts, int count) {
         return counts.entrySet().stream()
             .filter(e -> e.getValue() == count)
@@ -55,6 +68,11 @@ public class HandEvaluator {
             .orElse(0);
     }
 
+    /**
+     * Converts a hand score back into a human-readable description.
+     * @param score The integer score of the hand.
+     * @return A string description of the hand rank and kicker.
+     */
     public static String getHandDescription(int score) {
         int rankValue = score / 1000000;
         int kickerValue = score % 1000000;

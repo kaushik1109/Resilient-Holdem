@@ -8,8 +8,12 @@ import java.util.Comparator;
 import java.util.function.Consumer;
 
 import static util.ConsolePrint.printError;
-import static util.ConsolePrint.printElection;
+import static util.ConsolePrint.printConsensus;
 
+/**
+ * Implements a hold-back queue to ensure in-order delivery of game messages.
+ * Buffers out-of-order messages and requests retransmission of missing messages via NACKs.
+ */
 public class HoldBackQueue {
     private PriorityQueue<GameMessage> queue = new PriorityQueue<>(
         Comparator.comparingLong(msg -> msg.sequenceNumber)
@@ -50,6 +54,10 @@ public class HoldBackQueue {
         processQueue();
     }
 
+    /**
+     * Processes the hold-back queue to deliver messages in order.
+     * Sends NACKs for any missing messages.
+     */
     private void processQueue() {
         if (isProcessing) return; 
         isProcessing = true;
@@ -57,7 +65,7 @@ public class HoldBackQueue {
         try {
             while (!queue.isEmpty()) {
                 GameMessage head = queue.peek();
-                printElection("[Queue] Processing #" + head.sequenceNumber + ", expecting #" + nextExpectedSeq);
+                printConsensus("[Queue] Processing #" + head.sequenceNumber + ", expecting #" + nextExpectedSeq);
 
                 if (head.sequenceNumber == nextExpectedSeq) {
                     queue.poll();
@@ -86,12 +94,21 @@ public class HoldBackQueue {
         tcpLayer.sendNack(leaderId, missingSeq);
     }
 
+    /**
+     * Forces the hold-back queue to synchronize to a specific sequence number.
+     * Clears any buffered messages and updates the next expected sequence.
+     * @param catchUpSeq The sequence number to synchronize to.
+     */
     public synchronized void forceSync(long catchUpSeq) {
-        printElection("[Queue] Syncing queue to Sequence #" + catchUpSeq);
+        printConsensus("[Queue] Syncing queue to Sequence #" + catchUpSeq);
         this.nextExpectedSeq = catchUpSeq + 1;
         queue.clear(); 
     }
 
+    /**
+     * Delivers a message to the application layer (ClientGameState).
+     * @param msg The GameMessage being delivered.
+     */
     private void deliverToApp(GameMessage msg) {
         if (clientGame != null) {
             switch (msg.type) {

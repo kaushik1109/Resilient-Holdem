@@ -13,6 +13,10 @@ import networking.NetworkConfig;
 import static util.ConsolePrint.printError;
 import static util.ConsolePrint.printGame;
 
+/**
+ * Represents the context of a node in the Resilient Hold'em game.
+ * Manages networking, consensus, game state, and message routing.
+ */
 public class NodeContext {
     public boolean dropNext;
 
@@ -46,6 +50,9 @@ public class NodeContext {
         queue.setQueueAttributes(tcp, clientGame, this::handleQueueDelivery);
     }
 
+    /**
+     * Starts the node by initializing the TCP and UDP managers, starting the election stabilization period, and handling user commands.
+     */
     public void start() {
         tcp.start();
         udp.start();
@@ -53,8 +60,11 @@ public class NodeContext {
         ClientGameState.handleUserCommands(this);
     }
 
+    /**
+     * Routes incoming messages based on their type, handling consensus messages, game actions, and peer connection events accordingly.
+     * @param msg The GameMessage to be routed.
+     */
     public void routeMessage(GameMessage msg) {
-
         switch (msg.type) {
             case HEARTBEAT:
                 break;
@@ -122,18 +132,35 @@ public class NodeContext {
         }
     }
 
+    /**
+     * Handles the delivery of messages from the holdback queue to the application layer.
+     * Specifically processes PLAYER_ACTION messages if the node is the leader.
+     * This method is passed to the HoldBackQueue for callback upon message delivery to keep pipes dumb.
+     * @param msg The GameMessage being delivered.
+     */
     private void handleQueueDelivery(GameMessage msg) {
         if (election.iAmLeader && serverGame != null && msg.type == GameMessage.Type.PLAYER_ACTION) {
             serverGame.processAction(msg.getSenderId(), msg.payload);
         }
     }
 
+    /**
+     * Handles the event of a peer connecting to the node.
+     * If the node is the leader, it adds the new player to the server game.
+     * @param peerId The ID of the connected peer.
+     */
     public void onPeerConnected(String peerId) {
         if (election.iAmLeader && serverGame != null) {
             serverGame.addPlayer(peerId);
         }
     }
 
+    /**
+     * Handles the event of a peer disconnecting from the node.
+     * Closes the TCP connection to the peer 
+     * and informs the election manager and server game (if I am leader) about the disconnection.
+     * @param peerId The ID of the disconnected peer.
+     */
     public void onPeerDisconnected(String peerId) {
         printError("[Context] Peer " + peerId + " disconnected/crashed");
         tcp.closeConnection(peerId);
@@ -149,13 +176,26 @@ public class NodeContext {
 
     public TexasHoldem getServerGame() { return serverGame; }
 
+    /**
+     * Creates a new server game instance for the node.
+     * This method is called when the node becomes the leader.
+     */
     public void createServerGame() {
         this.serverGame = new TexasHoldem(this);
     }
 
+    /**
+     * Creates a new server game instance for the node with a loaded poker table state.
+     * This method is called when the node becomes the leader through a handover.
+     * @param loadedTable The PokerTable state to initialize the server game with.
+     */
     public void createServerGame(PokerTable loadedTable) {
         this.serverGame = new TexasHoldem(this, loadedTable);
     }
 
+    /**
+     * Destroys the current server game instance.
+     * This method is called when the node is no longer the leader before handover or wants to reset the game state.
+     */
     public void destroyServerGame() { this.serverGame = null; }
 }

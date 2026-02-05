@@ -10,9 +10,13 @@ import java.util.Objects;
 import game.NodeContext;
 
 import static util.ConsolePrint.printError;
-import static util.ConsolePrint.printElection;
+import static util.ConsolePrint.printConsensus;
 import static util.ConsolePrint.printElectionBold;
 
+/**
+ * Manages leader election in the Resilient Hold'em game using the Bully algorithm.
+ * Handles election initiation, victory declaration, and leader failure detection.
+ */
 public class ElectionManager {
     private final NodeContext context;
     public volatile String currentLeaderId = null;
@@ -21,15 +25,18 @@ public class ElectionManager {
     private volatile boolean electionInProgress = false;
     public volatile boolean iAmLeader = false; 
 
-
     public ElectionManager(NodeContext context, TcpMeshManager connectionManager) {
         this.context = context;
         this.connectionManager = connectionManager;
     }
 
+    /**
+     * Starts the stabilization period during which the node listens for existing leader signals.
+     * If no leader is detected within the period, initiates a new election.
+     */
     public void startStabilizationPeriod() {
         new Thread(() -> {
-            printElection("[Election] Listening for authoritative Leader signals.");
+            printConsensus("[Election] Listening for authoritative Leader signals.");
             currentLeaderId = null;
 
             while (connectionManager.getConnectedPeerIds().size() < 2) {
@@ -40,16 +47,20 @@ public class ElectionManager {
                 if (iAmLeader) return;
 
                 if (currentLeaderId != null) {
-                    printElection("[Election] Respecting existing Leader: " + currentLeaderId);
+                    printConsensus("[Election] Respecting existing Leader: " + currentLeaderId);
                     return;
                 }
             }
 
-            printElection("[Election] No Leader found. Starting Election.");
+            printConsensus("[Election] No Leader found. Starting Election.");
             startElection("Startup");
         }).start();
     }
 
+    /**
+     * Passes leadership to the next node in the sorted list of connected nodes.
+     * @param serializedTablePayload The serialized game state to send to the new leader.
+     */
     public void passLeadership(String serializedTablePayload) {
         if (!iAmLeader) return;
 
@@ -61,7 +72,7 @@ public class ElectionManager {
         int nextIndex = (myIndex + 1) % allNodes.size();
         String nextLeaderId = allNodes.get(nextIndex);
 
-        printElection("[Election] Handing over leadership to Node " + nextLeaderId);
+        printConsensus("[Election] Handing over leadership to Node " + nextLeaderId);
 
         iAmLeader = false;
         currentLeaderId = nextLeaderId;
@@ -69,26 +80,30 @@ public class ElectionManager {
         connectionManager.sendToPeer(nextLeaderId, new GameMessage(GameMessage.Type.HANDOVER, serializedTablePayload));
     }
 
+    /**
+     * Initiates a new election process using the Bully algorithm.
+     * @param reason The reason for starting the election e.g. "Leader Crash" or "Challenged by X".
+     */
     public synchronized void startElection(String reason) {
         if (iAmLeader || electionInProgress) return;
         
         electionInProgress = true;
         iAmLeader = false; 
-        printElection("[Election] Starting Election (" + reason + ").");
+        printConsensus("[Election] Starting Election (" + reason + ").");
 
         boolean sentChallenge = false;
         
         for (String peerId : connectionManager.getConnectedPeerIds()) {
             int peerHash = peerId.hashCode();
             if (peerHash > context.myIdHash) {
-                printElection("[Election] Challenging node " + peerId);
+                printConsensus("[Election] Challenging node " + peerId);
                 connectionManager.sendToPeer(peerId, new GameMessage(GameMessage.Type.ELECTION));
                 sentChallenge = true;
             }
         }
 
         if (!sentChallenge) {
-            printElection("[Election] No higher nodes, declaring victory.");
+            printConsensus("[Election] No higher nodes, declaring victory.");
             declareVictory(false);
             return;
         }
@@ -97,12 +112,16 @@ public class ElectionManager {
             try {
                 Thread.sleep(2000); 
                 if (!electionInProgress) return;
-                printElection("[Election] No higher nodes have responded, declaring victory.");
+                printConsensus("[Election] No higher nodes have responded, declaring victory.");
                 declareVictory(false);
             } catch (Exception e) {}
         }).start();
     }
 
+    /**
+     * Declares this node as the new leader and broadcasts the COORDINATOR message.
+     * @param handover Indicates if this declaration is part of a leadership handover.
+     */
     public synchronized void declareVictory(boolean handover) {
         if (!electionInProgress && !handover) return;
         printElectionBold("[Election] I am the new Leader.");
@@ -115,6 +134,10 @@ public class ElectionManager {
         if(!handover) context.createServerGame();
     }
 
+    /**
+     * Handles incoming election-related messages and responds according to the Bully algorithm.
+     * @param msg The GameMessage containing the election message.
+     */
     public void handleMessage(GameMessage msg) {
         switch (msg.type) {
             case ELECTION:
@@ -129,16 +152,20 @@ public class ElectionManager {
                 break;
 
             case COORDINATOR:
-               currentLeaderId = msg.getSenderId();
-               iAmLeader = currentLeaderId.equals(context.myId);
+                currentLeaderId = msg.getSenderId();
+                iAmLeader = currentLeaderId.equals(context.myId);
                 electionInProgress = false;
-                printElection("[Election] New leader: " + msg.getSenderId());
+                printConsensus("[Election] New leader: " + msg.getSenderId());
                 break;
                 
             default: break;
         }
     }
     
+    /**
+     * Handles the failure of a node by checking if it was the leader and initiating a new election if necessary.
+     * @param deadNodeId The ID of the node that has failed.
+     */
     public void handleNodeFailure(String deadNodeId) {
         printError("[Election] Detected failure of Node " + deadNodeId);
         

@@ -3,21 +3,27 @@ package networking;
 import java.io.Serializable;
 import java.util.Objects;
 
+/**
+ * Represents a message exchanged between peers in the TCP mesh network, encapsulating message type, sender information, payload, and sequence number for ordered delivery.
+ */
 public class GameMessage implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public enum Type {
         JOIN_REQUEST,
         HEARTBEAT,
+
         ELECTION, 
         ELECTION_OK, 
         COORDINATOR,
         HANDOVER,
         SYNC,
         LEAVE,
+
         ACTION_REQUEST,
         ORDERED_MULTICAST,
         NACK,
+
         YOUR_HAND,
         COMMUNITY_CARDS,
         PLAYER_ACTION,

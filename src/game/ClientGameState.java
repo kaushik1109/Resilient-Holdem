@@ -5,6 +5,10 @@ import networking.GameMessage;
 import static util.ConsolePrint.printError;
 import static util.ConsolePrint.printBold;
 
+/**
+ * Manages the client's view of the game state, including the player's hand,
+ * community cards, and game status messages.
+ */
 public class ClientGameState {
     public List<String> myHand = new ArrayList<>();
     public List<String> communityCards = new ArrayList<>();
@@ -45,6 +49,10 @@ public class ClientGameState {
         printBold("\nCommands: 'start' (Leader), 'bet / raise <amt>', 'call', 'fold', 'check', 'allin', 'quit', 'dropnext', 'help'");
     }
 
+    /**
+     * Handles user input commands from the console and translates them into game actions.
+     * @param node The NodeContext of the current node.
+     */
     public static void handleUserCommands(NodeContext node) {
         GameMessage actionMsg;
 

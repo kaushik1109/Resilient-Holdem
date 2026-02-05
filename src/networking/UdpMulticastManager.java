@@ -7,6 +7,9 @@ import game.NodeContext;
 
 import static util.ConsolePrint.printNetworking;
 
+/**
+ * Manages UDP multicast for peer discovery and group messaging.
+ */
 public class UdpMulticastManager {
     private static final String MULTICAST_GROUP = NetworkConfig.MULTICAST_GROUP;
     private static final int MULTICAST_PORT = NetworkConfig.MULTICAST_PORT;
@@ -23,6 +26,9 @@ public class UdpMulticastManager {
         new Thread(this::broadcastJoinRequest).start();
     }
 
+    /**
+     * Listens for incoming multicast messages and processes them.
+     */
     private void listenForBroadcasts() {
         try (MulticastSocket socket = new MulticastSocket(MULTICAST_PORT)) {
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
@@ -50,6 +56,9 @@ public class UdpMulticastManager {
         } catch (Exception e) { e.printStackTrace(); }
     }
 
+    /**
+     * Broadcasts a JOIN_REQUEST message to the multicast group.
+    */
     private void broadcastJoinRequest() {
         try (MulticastSocket socket = new MulticastSocket()) {
             socket.setTimeToLive(NetworkConfig.MULTICAST_TTL);
@@ -69,8 +78,10 @@ public class UdpMulticastManager {
         }
     }
 
-    
-
+    /**
+     * Sends a multicast message to all peers in the group.
+     * @param msg The GameMessage to be sent to the group.
+     */
     public void sendMulticast(GameMessage msg) {
         try (MulticastSocket socket = new MulticastSocket()) {
             socket.setTimeToLive(NetworkConfig.MULTICAST_TTL);

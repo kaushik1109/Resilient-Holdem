@@ -1,5 +1,9 @@
 package util;
 
+/**
+ * Utility class for printing colored and formatted messages to the console.
+ * Provides methods for different message types such as errors, networking info, election updates, and game events.
+ */
 public class ConsolePrint {
     public static void printError(String message) {
         System.err.println(ConsoleColors.RED + message + ConsoleColors.RESET);
@@ -13,7 +17,7 @@ public class ConsolePrint {
         System.out.println(ConsoleColors.PURPLE + message + ConsoleColors.RESET);
     }
 
-    public static void printElection(String message) {
+    public static void printConsensus(String message) {
         System.out.println(ConsoleColors.CYAN + message + ConsoleColors.RESET);
     }
 

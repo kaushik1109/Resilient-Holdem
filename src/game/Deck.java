@@ -3,6 +3,9 @@ package game;
 import java.io.Serializable;
 import java.util.*;
 
+/**
+ * Represents a standard deck of 52 playing cards, with methods to shuffle and deal cards.
+ */
 public class Deck implements Serializable {
     private LinkedList<Card> cards = new LinkedList<>();
 

@@ -31,7 +31,6 @@ public class TexasHoldem {
         }
 
         printGame("[Game] Reconciling player roster");
-        table.players.clear();
         for (String peerId : context.tcp.getConnectedPeerIds()) {
             addPlayer(peerId);
         }
@@ -44,6 +43,8 @@ public class TexasHoldem {
     public void addPlayer(String playerId) {
         if (playerId.equals(context.myId)) return;
         
+        sendPrivateMessage(GameMessage.Type.SYNC, playerId, String.valueOf(context.sequencer.getCurrentSeqId()));
+        
         if (table.players.stream().anyMatch(p -> p.id.equals(playerId))) return;
 
         Player newPlayer = new Player(playerId, 1000);
@@ -55,9 +56,6 @@ public class TexasHoldem {
         } else {
             printGame("[Game] Player " + playerId + " added to table.");
         }
-        
-        long currentSeq = context.sequencer.getCurrentSeqId();
-        sendPrivateMessage(GameMessage.Type.SYNC, playerId, String.valueOf(currentSeq));
 
         table.players.add(newPlayer);
     }
@@ -379,7 +377,7 @@ public class TexasHoldem {
         String stateData = getSerializedState();
         
         new Thread(() -> {
-            try { Thread.sleep(3000); } catch (Exception e) {}
+            try { Thread.sleep(2000); } catch (Exception e) {}
             context.election.passLeadership(stateData); 
             context.destroyServerGame();
         }).start();

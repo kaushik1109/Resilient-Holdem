@@ -4,6 +4,9 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Represents a player in the poker game, including their ID, name, chip count, current bet, and status.
+ */
 public class Player implements Serializable {
     // TCP Port (Node ID)
     public  String id;

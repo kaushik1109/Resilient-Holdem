@@ -12,6 +12,9 @@ import java.util.Random;
 import static util.ConsolePrint.printError;
 import static util.ConsolePrint.printNetworking;
 
+/**
+ * Configuration class for network settings, loaded from network.config or defaults.
+ */
 public class NetworkConfig {
     public static String MULTICAST_GROUP = "239.255.1.1";
     public static int MULTICAST_PORT = 8888;
@@ -20,6 +23,9 @@ public class NetworkConfig {
     public static String MY_IP;
     public static NetworkInterface MY_INTERFACE;
 
+    /**
+     * Loads network configuration from network.config file or uses default settings.
+     */
     public static void load() {
         Properties props = new Properties();
 
@@ -50,6 +56,10 @@ public class NetworkConfig {
 
     private NetworkConfig() {}
 
+    /**
+     * Retrieves the IP address associated with the selected network interface.
+     * @return The IP address as a String.
+     */
     public static String getIpFromInterface() {
         if (MY_INTERFACE == null) return "127.0.0.1";
 
@@ -65,6 +75,13 @@ public class NetworkConfig {
         return "127.0.0.1";
     }
 
+    /**
+     * Finds a valid network interface for multicast communication.
+     * The method prioritizes WiFi and Ethernet interfaces, while filtering out virtual, loopback, and non-multicast interfaces.
+     * 
+     * @return A suitable NetworkInterface.
+     * @throws SocketException If no valid interface is found.
+     */
     private static NetworkInterface findValidNetworkInterface() throws SocketException {
         Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
         NetworkInterface bestCandidate = null;

@@ -6,6 +6,9 @@ import java.util.List;
 
 import game.TexasHoldem.Phase;
 
+/**
+ * Represents the state of a Poker table, including players, deck, community cards, pot, and game phase.
+ */
 public class PokerTable implements Serializable {
     public List<Player> players = new ArrayList<>();
     public Deck deck;
