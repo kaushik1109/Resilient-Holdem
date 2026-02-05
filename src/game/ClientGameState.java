@@ -2,6 +2,8 @@ package game;
 
 import java.util.*;
 import networking.GameMessage;
+import networking.NetworkConfig;
+
 import static util.ConsolePrint.printError;
 import static util.ConsolePrint.printBold;
 
@@ -13,6 +15,8 @@ public class ClientGameState {
     public List<String> myHand = new ArrayList<>();
     public List<String> communityCards = new ArrayList<>();
     public String status = "Waiting for game";
+    public PokerTable table;
+    int myChips = 1000;
     
     public void onReceiveHand(String payload) {
         myHand.clear();
@@ -25,8 +29,18 @@ public class ClientGameState {
         Collections.addAll(communityCards, payload.split(","));
         System.out.println("Board: " + communityCards);
     }
+
+    public void onReceiveState(String payload) {
+        table = PokerTable.deserializeState(payload);
+
+        myChips = table.players.stream()
+            .filter(player -> player.id.equals(NetworkConfig.myId()))
+            .map(player -> player.chips)
+            .findFirst()
+            .orElse(1000);
+    }
     
-    public void onReceiveState(String msg) {
+    public void onReceiveInfo(String msg) {
         this.status = msg;
         System.out.println(msg);
     }
@@ -45,8 +59,36 @@ public class ClientGameState {
         System.out.println("Status: " + status);
     }
 
+    private void printPlayerRoster(PokerTable table) {
+        if (table == null) {
+            printError("No game in progress.");
+            return;
+        }
+
+        printBold("Current Players:");
+        for (Player player : table.players) {
+            System.out.printf(" - %s: Chips=%d, Bet=%d, Folded=%b\n",
+                player.name, player.chips, player.currentBet, player.folded);
+        }
+    }
+
     public static void printHelp() {
-        printBold("\nCommands: 'start' (Leader), 'bet / raise <amt>', 'call', 'fold', 'check', 'allin', 'quit', 'dropnext', 'help'");
+        List<String> commands = Arrays.asList(
+            "start - Start the game (Leader only)",
+            "add <amt> - Add chips to your stack",
+            "chips - Show your current chip count",
+            "bet / raise <amt> - Bet or raise by a certain amount",
+            "call - Call the current bet",
+            "fold - Fold your hand",
+            "check - Check (if no bet to call)",
+            "allin - Go all-in with your remaining chips",
+            "status - Print current game status",
+            "dropnext - Drop the next incoming game message (for testing)",
+            "help / commands - Show this help message",
+            "quit - Leave the game"
+        );
+        printBold("\nAvailable Commands:");
+        commands.forEach(cmd -> System.out.println("  " + cmd));
     }
 
     /**
@@ -79,9 +121,9 @@ public class ClientGameState {
                             }
                             break;
 
-                        case "bet": case "raise":
+                        case "bet": case "raise": case "pay":
                             if (parts.length < 2 || !parts[1].matches("\\d+")) {
-                                printError( "Enter a number to bet / raise. eg. bet 200");
+                                printError( "Enter a number to bet / raise / pay. eg. bet 200");
                                 break;
                             }
                             
@@ -113,6 +155,10 @@ public class ClientGameState {
                             }
                             break;
 
+                        case "chips":
+                            System.out.println("My Chips: " + node.clientGame.myChips);
+                            break;
+
                         case "status":
                             node.clientGame.printStatus(node.myId, node.election.currentLeaderId);
                             break;
@@ -125,6 +171,10 @@ public class ClientGameState {
                         case "dropnext":
                             node.dropNext = true;
                             printError("The next game message will be dropped.");
+                            break;
+
+                        case "players":
+                            node.clientGame.printPlayerRoster(node.getServerGame() != null ? node.getServerGame().table : node.clientGame.table);
                             break;
                         
                         case "help":

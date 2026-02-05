@@ -17,15 +17,15 @@ public class TcpMeshManager {
     private static final int TIMEOUT_THRESHOLD = 6000;
 
     private final int myPort;
-    private final NodeContext context; 
+    private final NodeContext node; 
     private ServerSocket serverSocket;
     private boolean running = true;
     
     private ConcurrentHashMap<String, Peer> peers = new ConcurrentHashMap<>();
 
-    public TcpMeshManager(NodeContext context) {
+    public TcpMeshManager(NodeContext node) {
         this.myPort = NetworkConfig.MY_PORT;
-        this.context = context;
+        this.node = node;
     }
 
     /**
@@ -85,7 +85,7 @@ public class TcpMeshManager {
                 if (peerId == null) {
                     peerId = msg.getSenderId();
                     peers.put(peerId, new Peer(peerId, socket, out));
-                    context.onPeerConnected(peerId);
+                    node.onPeerConnected(peerId);
                 }
 
                 Peer p = peers.get(peerId);
@@ -93,10 +93,10 @@ public class TcpMeshManager {
                     p.lastSeenTimestamp = System.currentTimeMillis();
                 }
                 
-                context.routeMessage(msg);
+                node.routeMessage(msg);
             }
         } catch (Exception e) {
-            context.onPeerDisconnected(peerId);
+            node.onPeerDisconnected(peerId);
         }
     }
 
@@ -105,17 +105,20 @@ public class TcpMeshManager {
      * @param ip The IP address of the peer.
      * @param port The port number of the peer.
      */
-    public void connectToPeer(String ip, int port) {
-        String peerId = ip + ":" + port;
-        if (peers.containsKey(peerId)) return;
+    public void connectToPeer(String targetPeerId) {
+        String[] parts = targetPeerId.split(":");
+        String ip = parts[0];
+        int port = Integer.parseInt(parts[1]);
+
+        if (peers.containsKey(targetPeerId)) return;
         if (ip.equals(NetworkConfig.MY_IP) && port == myPort) return;
 
         try {
             Socket socket = new Socket(ip, port);
-            printNetworking("[TCP] Connecting to " + peerId);
+            printNetworking("[TCP] Connecting to " + targetPeerId);
             handleNewConnection(socket);
         } catch (IOException e) {
-            printError("[TCP] Could not connect to peer " + peerId);
+            printError("[TCP] Could not connect to peer " + targetPeerId);
         }
     }
 
@@ -138,12 +141,7 @@ public class TcpMeshManager {
     public void sendToPeer(String targetPeerId, GameMessage msg) {
         Peer peer = peers.get(targetPeerId);
         if (peer == null) {
-            String[] parts = targetPeerId.split(":");
-            String ip = parts[0];
-            int port = Integer.parseInt(parts[1]);
-
-            connectToPeer(ip, port);
-
+            connectToPeer(targetPeerId);
             try { Thread.sleep(200); } catch (Exception e) {}
             peer = peers.get(targetPeerId);
         }
@@ -155,8 +153,8 @@ public class TcpMeshManager {
             }
         } catch (IOException e) {
             peers.remove(targetPeerId);
-            context.onPeerDisconnected(targetPeerId);
-            printError("Could not send message to peer " + targetPeerId);
+            node.onPeerDisconnected(targetPeerId);
+            printError("[TCP] Could not send message to peer " + targetPeerId);
         }   
     }
 
@@ -186,7 +184,6 @@ public class TcpMeshManager {
         while (running) {
             try {
                 Thread.sleep(HEARTBEAT_INTERVAL);
-                
                 GameMessage hb = new GameMessage(GameMessage.Type.HEARTBEAT);
                 broadcastToAll(hb);
             } catch (InterruptedException e) {}
@@ -205,7 +202,7 @@ public class TcpMeshManager {
                 for (Peer peer : peers.values()) {
                     if (now - peer.lastSeenTimestamp > TIMEOUT_THRESHOLD) {
                         printError("[TCP] Peer " + peer.peerId + " timed out!");
-                        context.onPeerDisconnected(peer.peerId);
+                        node.onPeerDisconnected(peer.peerId);
                     }
                 }
             } catch (InterruptedException e) {}

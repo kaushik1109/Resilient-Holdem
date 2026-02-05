@@ -28,6 +28,7 @@ public class GameMessage implements Serializable {
         COMMUNITY_CARDS,
         PLAYER_ACTION,
         GAME_STATE,
+        GAME_INFO,
         SHOWDOWN
     }
 

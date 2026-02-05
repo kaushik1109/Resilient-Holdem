@@ -32,10 +32,11 @@ public class NodeContext {
     public final HoldBackQueue queue;
     public final ClientGameState clientGame;
     
+    // Set to private because we only want to create it in a specific way
     private TexasHoldem serverGame;
 
     public NodeContext() {
-        this.myId = NetworkConfig.MY_IP + ":" + NetworkConfig.MY_PORT;
+        this.myId = NetworkConfig.myId();
         this.myIdHash = Objects.hash(myId);
 
         this.clientGame = new ClientGameState();
@@ -84,7 +85,7 @@ public class NodeContext {
 
             case HANDOVER:
                 printGame("[Context] Leadership passed to me");
-                PokerTable loadedTable = TexasHoldem.deserializeState(msg.payload);
+                PokerTable loadedTable = PokerTable.deserializeState(msg.payload);
                 election.declareVictory(true);
                 createServerGame(loadedTable);
 
@@ -95,7 +96,7 @@ public class NodeContext {
 
             case ORDERED_MULTICAST:
             case PLAYER_ACTION:
-            case GAME_STATE:
+            case GAME_INFO:
             case COMMUNITY_CARDS:
             case SHOWDOWN:
                 if (dropNext) {
@@ -105,12 +106,16 @@ public class NodeContext {
                 }
 
                 if (msg.sequenceNumber <= 0) {
-                    if (msg.type == GameMessage.Type.GAME_STATE) {
-                         clientGame.onReceiveState(msg.payload);
+                    if (msg.type == GameMessage.Type.GAME_INFO) {
+                         clientGame.onReceiveInfo(msg.payload);
                     }
                 } else {
                     queue.addMessage(msg);
                 }
+                break;
+
+            case GAME_STATE:
+                queue.addMessage(msg);
                 break;
 
             case SYNC:
@@ -190,6 +195,11 @@ public class NodeContext {
      * @param loadedTable The PokerTable state to initialize the server game with.
      */
     public void createServerGame(PokerTable loadedTable) {
+        if (loadedTable == null) {
+            createServerGame();
+            return;
+        }
+
         this.serverGame = new TexasHoldem(this, loadedTable);
     }
 

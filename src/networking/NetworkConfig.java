@@ -45,13 +45,16 @@ public class NetworkConfig {
 
         MY_PORT = Integer.parseInt(props.getProperty("port", String.valueOf(MY_PORT)));
 
-
         try {
             MY_INTERFACE = findValidNetworkInterface();
             MY_IP = getIpFromInterface();
         } catch (Exception e) {
             MY_IP = "unknown";
         }
+    }
+
+    public static String myId() {
+        return MY_IP + ":" + MY_PORT;
     }
 
     private NetworkConfig() {}
@@ -121,5 +124,4 @@ public class NetworkConfig {
         printError("[UDP] No valid WiFi/Ethernet found. Falling back to Loopback.");
         return NetworkInterface.getByName("127.0.0.1");
     }
-    
 }

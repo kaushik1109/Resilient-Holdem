@@ -5,10 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Represents a player in the poker game, including their ID, name, chip count, current bet, and status.
+ * Represents a player in the poker game, including their ID (IP:port), name, chip count, current bet, and status.
  */
 public class Player implements Serializable {
-    // TCP Port (Node ID)
     public  String id;
 
     public String name;
@@ -19,12 +18,16 @@ public class Player implements Serializable {
     public List<Card> holeCards = new ArrayList<>();
     public boolean isActive = true;
 
-    public Player(String id, int startChips) {
+    public Player(String id, String name, int startChips) {
         this.id = id;
-        this.name = "Player " + id;
+        this.name = name;
         this.chips = startChips;
         this.currentBet = 0;
         this.isActive = true;
+    }
+
+    public Player(String id, int startChips) {
+        this(id, "Player " + id, startChips);
     }
 
     public void resetForNewHand() {

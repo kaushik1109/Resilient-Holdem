@@ -20,7 +20,7 @@ public class HoldBackQueue {
     );
     
     private long nextExpectedSeq = 1;
-    private TcpMeshManager tcpLayer; 
+    private TcpMeshManager tcp; 
     private ClientGameState clientGame;
     private String leaderId = null;
     private boolean isProcessing = false;
@@ -35,8 +35,8 @@ public class HoldBackQueue {
         this.clientGame = clientGameState;
     }
 
-    public void setTcpLayer(TcpMeshManager tcpLayer) {
-        this.tcpLayer = tcpLayer;
+    public void setTcp(TcpMeshManager tcpLayer) {
+        this.tcp = tcpLayer;
     }
 
     public void setLeaderId(String leaderId) {
@@ -44,7 +44,7 @@ public class HoldBackQueue {
     }
 
     public void setQueueAttributes(TcpMeshManager tcpLayer, ClientGameState clientGameState, Consumer<GameMessage> callback) {
-        this.tcpLayer = tcpLayer;
+        this.tcp = tcpLayer;
         this.clientGame = clientGameState;
         this.onMessageReceived = callback;
     }
@@ -91,7 +91,7 @@ public class HoldBackQueue {
     
     private void sendNack(long missingSeq) {
         printError("[Queue] Sending NACK for #" + missingSeq);
-        tcpLayer.sendNack(leaderId, missingSeq);
+        tcp.sendNack(leaderId, missingSeq);
     }
 
     /**
@@ -115,10 +115,16 @@ public class HoldBackQueue {
                 case COMMUNITY_CARDS: 
                     clientGame.onReceiveCommunity(msg.payload); 
                     break;
-                case GAME_STATE:
+                    
+                case GAME_INFO:
                 case SHOWDOWN:
-                    clientGame.onReceiveState(msg.payload); 
+                    clientGame.onReceiveInfo(msg.payload); 
                     break;
+
+                case GAME_STATE:
+                    clientGame.onReceiveState(msg.payload);
+                    break;
+
                 default:
                     break;
             }

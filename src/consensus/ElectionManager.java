@@ -18,15 +18,15 @@ import static util.ConsolePrint.printElectionBold;
  * Handles election initiation, victory declaration, and leader failure detection.
  */
 public class ElectionManager {
-    private final NodeContext context;
+    private final NodeContext node;
     public volatile String currentLeaderId = null;
     private TcpMeshManager connectionManager;
     
     private volatile boolean electionInProgress = false;
     public volatile boolean iAmLeader = false; 
 
-    public ElectionManager(NodeContext context, TcpMeshManager connectionManager) {
-        this.context = context;
+    public ElectionManager(NodeContext node, TcpMeshManager connectionManager) {
+        this.node = node;
         this.connectionManager = connectionManager;
     }
 
@@ -65,10 +65,10 @@ public class ElectionManager {
         if (!iAmLeader) return;
 
         List<String> allNodes = new ArrayList<>(connectionManager.getConnectedPeerIds());
-        allNodes.add(context.myId);
+        allNodes.add(node.myId);
         allNodes.sort(Comparator.comparingInt(node -> Objects.hash(node)));
 
-        int myIndex = allNodes.indexOf(context.myId);
+        int myIndex = allNodes.indexOf(node.myId);
         int nextIndex = (myIndex + 1) % allNodes.size();
         String nextLeaderId = allNodes.get(nextIndex);
 
@@ -95,7 +95,7 @@ public class ElectionManager {
         
         for (String peerId : connectionManager.getConnectedPeerIds()) {
             int peerHash = peerId.hashCode();
-            if (peerHash > context.myIdHash) {
+            if (peerHash > node.myIdHash) {
                 printConsensus("[Election] Challenging node " + peerId);
                 connectionManager.sendToPeer(peerId, new GameMessage(GameMessage.Type.ELECTION));
                 sentChallenge = true;
@@ -127,11 +127,11 @@ public class ElectionManager {
         printElectionBold("[Election] I am the new Leader.");
         
         iAmLeader = true;
-        currentLeaderId = context.myId;
+        currentLeaderId = node.myId;
         electionInProgress = false;
         connectionManager.broadcastToAll(new GameMessage(GameMessage.Type.COORDINATOR));
 
-        if(!handover) context.createServerGame();
+        if(!handover) node.createServerGame(node.clientGame.table);
     }
 
     /**
@@ -141,7 +141,7 @@ public class ElectionManager {
     public void handleMessage(GameMessage msg) {
         switch (msg.type) {
             case ELECTION:
-                if (msg.getSenderHash() < context.myIdHash) {
+                if (msg.getSenderHash() < node.myIdHash) {
                     connectionManager.sendToPeer(msg.getSenderId(), new GameMessage(GameMessage.Type.ELECTION_OK));
                     startElection("Challenged by " + msg.getSenderId());
                 }
@@ -153,7 +153,7 @@ public class ElectionManager {
 
             case COORDINATOR:
                 currentLeaderId = msg.getSenderId();
-                iAmLeader = currentLeaderId.equals(context.myId);
+                iAmLeader = currentLeaderId.equals(node.myId);
                 electionInProgress = false;
                 printConsensus("[Election] New leader: " + msg.getSenderId());
                 break;

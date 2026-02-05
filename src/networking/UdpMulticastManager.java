@@ -5,6 +5,7 @@ import java.net.*;
 
 import game.NodeContext;
 
+import static util.ConsolePrint.printError;
 import static util.ConsolePrint.printNetworking;
 
 /**
@@ -14,11 +15,11 @@ public class UdpMulticastManager {
     private static final String MULTICAST_GROUP = NetworkConfig.MULTICAST_GROUP;
     private static final int MULTICAST_PORT = NetworkConfig.MULTICAST_PORT;
     
-    private final NodeContext context;
+    private final NodeContext node;
     private boolean running = true;
 
-    public UdpMulticastManager(NodeContext context) {
-        this.context = context;
+    public UdpMulticastManager(NodeContext node) {
+        this.node = node;
     }
 
     public void start() {
@@ -48,12 +49,15 @@ public class UdpMulticastManager {
                 printNetworking("[UDP] Received message from " + msg.getSenderId() + " of type: " + msg.type);
 
                 if (msg.type == GameMessage.Type.JOIN_REQUEST) {
-                    context.tcp.connectToPeer(msg.senderIp, msg.senderPort);
+                    node.tcp.connectToPeer(msg.getSenderId());
                 } else {
-                    context.routeMessage(msg);
+                    node.routeMessage(msg);
                 }
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) {
+            printError("[UDP] " + e.getMessage());
+            e.printStackTrace(); 
+        }
     }
 
     /**
@@ -74,6 +78,7 @@ public class UdpMulticastManager {
             socket.send(packet);
             printNetworking("[UDP] Broadcasted JOIN_REQUEST.");
         } catch (Exception e) {
+            printError("[UDP] " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -97,6 +102,7 @@ public class UdpMulticastManager {
             
             printNetworking("[UDP] Sent Multicast: " + msg.type + " (Seq: " + msg.sequenceNumber + ")");
         } catch (Exception e) {
+            printError("[UDP] " + e.getMessage());
             e.printStackTrace();
         }
     }
