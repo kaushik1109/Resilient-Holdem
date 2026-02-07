@@ -420,7 +420,7 @@ public class TexasHoldem {
             summary.append("\n").append("Winner: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot);
             node.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, summary.toString()));
         }
-        
+
         table.resetDeck();
         passLeadership();
     }
@@ -432,6 +432,12 @@ public class TexasHoldem {
      * @param playerId The ID of the crashed player.
      */
     public void handlePlayerCrash(String playerId) {
+        if (!gameInProgress) {
+            printError("[Game] Removing Player " + playerId + " from table due to disconnection");
+            table.removePlayer(playerId);
+            return;
+        }
+
         Player p = table.players.stream()
             .filter(player -> player.id.equals(playerId))
             .findFirst()

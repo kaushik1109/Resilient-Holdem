@@ -39,7 +39,7 @@ public class Peer {
 
         int peerIdx = peerIdList.indexOf(peerId);
 
-        if (peerIdx == (roundNumber%peerIds.size())) {
+        if (peerIdx == (roundNumber%peerIdList.size())) {
             hash += 999999999999L; 
         }
 
