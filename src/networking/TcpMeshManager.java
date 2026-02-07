@@ -141,6 +141,7 @@ public class TcpMeshManager {
     public void sendToPeer(String targetPeerId, GameMessage msg) {
         Peer peer = peers.get(targetPeerId);
         if (peer == null) {
+            printError("Cannot find peer ID, reconnecting to Peer " + targetPeerId);
             connectToPeer(targetPeerId);
             try { Thread.sleep(300); } catch (Exception e) {}
             peer = peers.get(targetPeerId);

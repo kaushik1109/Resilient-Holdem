@@ -38,7 +38,7 @@ public class ElectionManager {
         new Thread(() -> {
             currentLeaderId = null;
 
-            while (connectionManager.getConnectedPeerIds().size() < 2) {
+            while (connectionManager.getConnectedPeerIds().size() < 3) {
                 try {
                     Thread.sleep(1000); 
                 } catch (InterruptedException e) { }

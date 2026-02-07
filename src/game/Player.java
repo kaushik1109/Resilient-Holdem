@@ -8,7 +8,7 @@ import java.util.List;
  * Represents a player in the poker game, including their ID (IP:port), name, chip count, current bet, and status.
  */
 public class Player implements Serializable {
-    public  String id;
+    public String id;
 
     public String name;
     public int chips;
