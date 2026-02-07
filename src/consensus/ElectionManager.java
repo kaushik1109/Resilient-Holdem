@@ -168,7 +168,7 @@ public class ElectionManager {
     public void handleNodeFailure(String deadNodeId) {
         printError("[Election] Detected failure of Node " + deadNodeId);
         
-        if (deadNodeId == currentLeaderId) {
+        if (deadNodeId.equals(currentLeaderId)) {
             printError("[Election] The leader has crashed, starting election again");
             new Thread(() -> {
                 try { Thread.sleep(500); } catch(Exception e){}

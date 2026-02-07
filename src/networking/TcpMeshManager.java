@@ -151,7 +151,7 @@ public class TcpMeshManager {
                 printNetworking("[TCP] Sending message of type " + msg.type + " to peer " + targetPeerId);
             }
             
-            synchronized(peer.out) {
+            synchronized(peer) {
                 peer.out.writeObject(msg);
                 peer.out.flush();
             }
