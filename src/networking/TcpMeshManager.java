@@ -147,7 +147,10 @@ public class TcpMeshManager {
         }
 
         try {
-            printNetworking("[TCP] Sending message of type " + msg.type + " to peer " + targetPeerId);
+            if (msg.type != GameMessage.Type.HEARTBEAT) {
+                printNetworking("[TCP] Sending message of type " + msg.type + " to peer " + targetPeerId);
+            }
+            
             synchronized(peer.out) {
                 peer.out.writeObject(msg);
                 peer.out.flush();
