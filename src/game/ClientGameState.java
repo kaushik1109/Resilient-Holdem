@@ -15,7 +15,7 @@ public class ClientGameState {
     public List<String> myHand = new ArrayList<>();
     public List<String> communityCards = new ArrayList<>();
     public String status = "Waiting for game";
-    public PokerTable table;
+    public PokerTable table = new PokerTable();
     int myChips = 1000;
     
     public void onReceiveHand(String payload) {
@@ -67,7 +67,7 @@ public class ClientGameState {
 
         printBold("Current Players:");
         for (Player player : table.players) {
-            System.out.printf(" - %s: Chips=%d, Bet=%d, Folded=%b\n",
+            System.out.printf("%s: Chips=%d, Bet=%d, Folded=%b\n",
                 player.name, player.chips, player.currentBet, player.folded);
         }
     }

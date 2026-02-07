@@ -1,7 +1,5 @@
 package game;
 
-import java.util.Objects;
-
 import consensus.ElectionManager;
 import consensus.HoldBackQueue;
 import consensus.Sequencer;
@@ -22,8 +20,6 @@ public class NodeContext {
 
     // This will always be of the form ip:port
     public final String myId;
-
-    public final int myIdHash;
     
     public final TcpMeshManager tcp;
     public final UdpMulticastManager udp;
@@ -37,7 +33,6 @@ public class NodeContext {
 
     public NodeContext() {
         this.myId = NetworkConfig.myId();
-        this.myIdHash = Objects.hash(myId);
 
         this.clientGame = new ClientGameState();
         this.queue = new HoldBackQueue();
@@ -145,7 +140,7 @@ public class NodeContext {
      */
     private void handleQueueDelivery(GameMessage msg) {
         if (election.iAmLeader && serverGame != null && msg.type == GameMessage.Type.PLAYER_ACTION) {
-            serverGame.processAction(msg.getSenderId(), msg.payload);
+            serverGame.processAction(msg.payload);
         }
     }
 
@@ -167,6 +162,8 @@ public class NodeContext {
      * @param peerId The ID of the disconnected peer.
      */
     public void onPeerDisconnected(String peerId) {
+        if (!tcp.isPeerAlive(peerId)) return;
+
         printError("[Context] Peer " + peerId + " disconnected/crashed");
         tcp.closeConnection(peerId);
 

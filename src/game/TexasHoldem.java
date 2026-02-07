@@ -45,6 +45,12 @@ public class TexasHoldem {
                 player.isActive = false;
                 player.folded = true;
             } else {
+                if (isPlayerInactive(player)) {
+                    printGame("[Game] Player " + player.id + " in game state but not connected. Removing from table.");
+                    table.removePlayer(player.id);
+                    continue;
+                }
+
                 player.isActive = true;
                 player.folded = false;
             }
@@ -52,6 +58,7 @@ public class TexasHoldem {
 
         printGame("[Game] I (Node " + node.myId + ") am now Dealer. Leaving the table.");
 
+        table.resetDeck();
         this.gameInProgress = true;
         node.queue.forceSync(node.sequencer.getCurrentSeqId());
         printNormal("Game State Loaded. Type 'start' to begin next hand");
@@ -102,7 +109,6 @@ public class TexasHoldem {
         table.currentPlayerIndex = (table.dealerIndex + 1) % table.players.size();
 
         while (!table.players.get(table.currentPlayerIndex).isActive) {
-            printGame("[Game] Skipping inactive player " + table.players.get(table.currentPlayerIndex).id);
             table.currentPlayerIndex = (table.currentPlayerIndex + 1) % table.players.size();
         }
 
@@ -118,7 +124,7 @@ public class TexasHoldem {
             node.tcp.sendToPeer(p.id, new GameMessage(GameMessage.Type.YOUR_HAND, c1 + "," + c2));
         }
         
-        broadcastState("New Round! Dealer Node is " + node.myId + ".");
+        multicastInfo("New Round! Dealer Node is " + node.myId + ".");
         notifyTurn();
     }
 
@@ -141,8 +147,9 @@ public class TexasHoldem {
      * to ensure the message is received after any state updates.
      */
     private void notifyTurn() {
+        multicastState();
         Player next = table.players.get(table.currentPlayerIndex);
-        broadcastState("Pot: " + table.pot + " | Turn: Player " + next.id + " (To Call: " + (table.currentHighestBet - next.currentBet) + ")");
+        multicastInfo("Pot: " + table.pot + " | Turn: Player " + next.id + " (To Call: " + (table.currentHighestBet - next.currentBet) + ")");
         try { Thread.sleep(500); } catch (Exception e) {}
         sendPrivateState(next.id, "It is your turn!");
     }
@@ -173,10 +180,9 @@ public class TexasHoldem {
      * Processes a player's action command, updating the game state accordingly.
      * Validates actions such as fold, call, check, bet/raise, and all-in.
      * Advances the game state and notifies players as necessary.
-     * @param playerId The ID of the player performing the action.
      * @param command The action command string.
      */
-    public void processAction(String playerId, String command) {
+    public void processAction(String command) {
         if (!gameInProgress) return;
 
         Player current = table.players.get(table.currentPlayerIndex);
@@ -189,25 +195,24 @@ public class TexasHoldem {
             switch (type) {
                 case "fold":
                     current.folded = true;
-                    broadcastState("Player " + playerId + " folds.");
+                    multicastInfo("Player " + current.id + " folds.");
                     actionValid = true;
                     break;
 
                 case "call":
                     int callAmt = table.currentHighestBet - current.currentBet;
                     if (payChips(current, callAmt)) {
-                        broadcastState("Player " + playerId + " calls " + callAmt);
-                        sendUpdatedTableState();
+                        multicastInfo("Player " + current.id + " calls " + callAmt);
                         actionValid = true;
                     }
                     break;
 
                 case "check":
                     if (current.currentBet == table.currentHighestBet) {
-                        broadcastState("Player " + playerId + " Checks.");
+                        multicastInfo("Player " + current.id + " checks.");
                         actionValid = true;
                     } else {
-                        sendPrivateState(playerId, "Cannot check. You must call " + (table.currentHighestBet - current.currentBet));
+                        sendPrivateState(current.id, "Cannot check. You must call " + (table.currentHighestBet - current.currentBet));
                     }
                     break;
 
@@ -220,11 +225,13 @@ public class TexasHoldem {
                         int totalBet = current.currentBet; 
                         if (totalBet > table.currentHighestBet) {
                             table.currentHighestBet = totalBet;
-                            broadcastState("Player " + playerId + " bets/raises " + amount);
-                            sendUpdatedTableState();
+                            multicastInfo("Player " + current.id + " bets / raises " + amount);
+                            actionValid = true;
+                        } else if (amount == table.currentHighestBet) {
+                            multicastInfo("Player " + current.id + " matches the current bet.");
                             actionValid = true;
                         } else {
-                            sendPrivateState(playerId, "Bet too small. Must exceed " + table.currentHighestBet);
+                            sendPrivateState(current.id, "Bet too small. Must exceed " + table.currentHighestBet);
                         }
                     }
                     break;
@@ -233,17 +240,15 @@ public class TexasHoldem {
                 case "add":
                     if (parts.length < 2) break;
                     int chips = Integer.parseInt(parts[1]);
-                    Player player = table.players.get(table.currentPlayerIndex);
-                    player.chips += chips;
-                    broadcastState("Player " + playerId + " buys in for " + chips + " chips. Current chips: " + player.chips);
-                    sendUpdatedTableState();
+                    current.chips += chips;
+                    multicastInfo("Player " + current.id + " buys in for " + chips + " chips. Current chips: " + current.chips);
                     break;
                     
                 case "allin":
                      payChips(current, current.chips);
                      if (current.currentBet > table.currentHighestBet) table.currentHighestBet = current.currentBet;
                      current.allIn = true;
-                     broadcastState("Player " + playerId + " goes all in!");
+                     multicastInfo("Player " + current.id + " goes all in!");
                      actionValid = true;
                      break;
             }
@@ -293,7 +298,7 @@ public class TexasHoldem {
             .filter(p -> !p.folded && !p.allIn)
             .allMatch(p -> p.currentBet == table.currentHighestBet);
 
-        // Logic check: If everyone else is All-In/Folded except one guy, ensuring he doesn't bet against himself?
+        // Logic check: If everyone else is All-In / Folded except one guy, ensuring he doesn't bet against himself?
         // For simplicity: If all active (non-all-in) players matched, we advance.
         if (allMatched && table.playersActedThisPhase >= activeCount) {
             advancePhase();
@@ -305,9 +310,7 @@ public class TexasHoldem {
             table.currentPlayerIndex = (table.currentPlayerIndex + 1) % table.players.size();
             loopSafety++;
         } while (
-            (table.players.get(table.currentPlayerIndex).folded || 
-             table.players.get(table.currentPlayerIndex).allIn)
-            && loopSafety < table.players.size()
+            (table.players.get(table.currentPlayerIndex).folded || table.players.get(table.currentPlayerIndex).allIn) && loopSafety < table.players.size()
         );
 
         notifyTurn();
@@ -338,17 +341,17 @@ public class TexasHoldem {
             case PREFLOP:
                 table.currentPhase = Phase.FLOP;
                 dealCommunity(3);
-                broadcastState("The FLOP is dealt!");
+                multicastInfo("The FLOP is dealt!");
                 break;
             case FLOP:
                 table.currentPhase = Phase.TURN;
                 dealCommunity(1);
-                broadcastState("The TURN is dealt!");
+                multicastInfo("The TURN is dealt!");
                 break;
             case TURN:
                 table.currentPhase = Phase.RIVER;
                 dealCommunity(1);
-                broadcastState("The RIVER is dealt!");
+                multicastInfo("The RIVER is dealt!");
                 break;
             case RIVER:
                 table.currentPhase = Phase.SHOWDOWN;
@@ -358,10 +361,10 @@ public class TexasHoldem {
         }
         
         if (skipBetting) {
-            broadcastState("All players all-in (or only one active). Running it out");
+            multicastInfo("All players all-in (or only one active). Running it out");
             
             new Thread(() -> {
-                try { Thread.sleep(2000); } catch (Exception e) {}
+                try { Thread.sleep(1500); } catch (Exception e) {}
                 advancePhase(); 
             }).start();
         } else {
@@ -416,6 +419,7 @@ public class TexasHoldem {
         
         if (winner != null) {
             winner.chips += table.pot;
+            table.resetDeck();
             summary.append("\n").append("Winner: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot);
             node.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, summary.toString()));
         }
@@ -442,16 +446,18 @@ public class TexasHoldem {
         p.isActive = false;
         p.folded = true; 
         
-        broadcastState("Player " + playerId + " disconnected and is Auto-Folded");
+        multicastInfo("Player " + playerId + " disconnected and is auto-folded");
+
+        long activeCount = table.players.stream().filter(pl -> pl.isActive && !pl.folded).filter(pl -> pl.id != playerId).count();
+        if (activeCount < 2) {
+            endRoundByFold();
+        }
 
         if (table.players.indexOf(p) == table.currentPlayerIndex) {
             printError("[Game] Crashed player had the turn. Forcing fold");
-            processAction(playerId, "fold");
-        }
-        
-        long activeCount = table.players.stream().filter(pl -> pl.isActive && !pl.folded).count();
-        if (activeCount < 2) {
-            endRoundByFold();
+            processAction("fold");
+        } else {
+            multicastState();
         }
     }
 
@@ -464,6 +470,7 @@ public class TexasHoldem {
 
         if (winner != null) {
             winner.chips += table.pot;
+            table.resetDeck();
 
             node.sequencer.multicastAction(new GameMessage(
                 GameMessage.Type.SHOWDOWN, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot
@@ -479,8 +486,17 @@ public class TexasHoldem {
      */
     private void passLeadership() {
         printGame("[Game] Hand finished.");
+
+        for (Player player : table.players) {
+            if (!player.id.equals(node.myId) && isPlayerInactive(player)) {
+                printGame("[Game] Player " + player.id + " in game state but not connected. Removing from table.");
+                table.removePlayer(player.id);
+            }
+        }
+
+        table.roundNumber += 1;
         
-        sendUpdatedTableState();
+        multicastState();
         
         printGame("[Game] Rotating dealer.");
         new Thread(() -> {
@@ -495,13 +511,17 @@ public class TexasHoldem {
     /**
      * Sends the updated table state to all players.
      */
-    private void sendUpdatedTableState() {
+    private void multicastState() {
         printGame("[Game] Sending updated table state to all players.");
         String stateData = PokerTable.getSerializedState(table);
         node.sequencer.multicastAction(new GameMessage(GameMessage.Type.GAME_STATE, stateData));
     }
 
-    private void broadcastState(String msg) {
+    private boolean isPlayerInactive(Player p) {
+        return !node.tcp.isPeerAlive(p.id);
+    }
+
+    private void multicastInfo(String msg) {
         node.sequencer.multicastAction(new GameMessage(GameMessage.Type.GAME_INFO, msg));
     }
     

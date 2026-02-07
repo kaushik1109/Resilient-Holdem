@@ -14,15 +14,19 @@ public class ConsolePrint {
     }
 
     public static void printNetworking(String message) {
-        System.out.println(ConsoleColors.PURPLE + message + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.BLUE + message + ConsoleColors.RESET);
     }
 
     public static void printConsensus(String message) {
         System.out.println(ConsoleColors.CYAN + message + ConsoleColors.RESET);
     }
 
+    public static void printElection(String message) {
+        System.out.println(ConsoleColors.YELLOW + message + ConsoleColors.RESET);
+    }
+
     public static void printElectionBold(String message) {
-        System.out.println(ConsoleColors.CYAN_BOLD + message + ConsoleColors.RESET);
+        System.out.println(ConsoleColors.YELLOW_BOLD + message + ConsoleColors.RESET);
     }
 
     public static void printNormal(String message) {

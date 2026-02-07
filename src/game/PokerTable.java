@@ -9,6 +9,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import game.TexasHoldem.Phase;
 
@@ -16,7 +17,7 @@ import game.TexasHoldem.Phase;
  * Represents the state of a Poker table, including players, deck, community cards, pot, and game phase.
  */
 public class PokerTable implements Serializable {
-    public List<Player> players = new ArrayList<>();
+    public List<Player> players = new CopyOnWriteArrayList<>();
     public Deck deck;
     public List<Card> communityCards = new ArrayList<>();
     
@@ -28,6 +29,8 @@ public class PokerTable implements Serializable {
     
     public TexasHoldem.Phase currentPhase = TexasHoldem.Phase.PREFLOP;
     public int playersActedThisPhase = 0;
+
+    public int roundNumber = 0;
 
     public PokerTable() {
         this.deck = new Deck();
@@ -41,6 +44,10 @@ public class PokerTable implements Serializable {
         this.currentHighestBet = 0;
         this.currentPhase = Phase.PREFLOP;
         this.playersActedThisPhase = 0;
+    }
+
+    public void removePlayer(String playerId) {
+        players.removeIf(p -> p.id.equals(playerId));
     }
 
     /**

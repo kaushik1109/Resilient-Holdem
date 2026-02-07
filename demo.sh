@@ -19,5 +19,7 @@ sleep 1
 open_terminal
 sleep 1
 open_terminal
+sleep 1
+open_terminal
 
-echo "Done! 3 Nodes running."
+echo "Done! 4 Nodes running."

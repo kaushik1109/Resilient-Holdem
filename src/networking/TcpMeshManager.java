@@ -62,6 +62,11 @@ public class TcpMeshManager {
             out.writeObject(new GameMessage(GameMessage.Type.HEARTBEAT));
             out.flush();
 
+            if(node.election.iAmLeader) {
+                out.writeObject(new GameMessage(GameMessage.Type.COORDINATOR));
+                out.flush();
+            }
+
             new Thread(() -> listenToPeer(in, socket, out)).start();
         } catch (IOException e) { e.printStackTrace(); }
     }
@@ -128,9 +133,7 @@ public class TcpMeshManager {
      * @param sequenceNumber The missing sequence number.
      */
     public void sendNack(String targetPeerId, long sequenceNumber) {
-        sendToPeer(targetPeerId,
-            new GameMessage(GameMessage.Type.NACK, String.valueOf(sequenceNumber))
-        );
+        sendToPeer(targetPeerId, new GameMessage(GameMessage.Type.NACK, String.valueOf(sequenceNumber)));
     }
 
     /**
