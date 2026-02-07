@@ -17,7 +17,10 @@ import game.TexasHoldem.Phase;
  * Represents the state of a Poker table, including players, deck, community cards, pot, and game phase.
  */
 public class PokerTable implements Serializable {
+    // Thread safe alternative to arraylist. We're using this because sometimes 
+    // we've had race conditions with one thread removing players while another is reading the list
     public List<Player> players = new CopyOnWriteArrayList<>();
+
     public Deck deck;
     public List<Card> communityCards = new ArrayList<>();
     
@@ -37,6 +40,12 @@ public class PokerTable implements Serializable {
     }
 
     public void resetDeck() {
+        for (Player p : this.players) {
+            p.chips += p.totalBet;
+            p.totalBet = 0;
+            p.currentBet = 0;
+        }
+
         this.deck = new Deck();
         this.deck.shuffle();
         this.communityCards.clear();

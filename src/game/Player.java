@@ -13,6 +13,7 @@ public class Player implements Serializable {
     public String name;
     public int chips;
     public int currentBet;  
+    public int totalBet;  
     public boolean folded = false;
     public boolean allIn = false;
     public List<Card> holeCards = new ArrayList<>();

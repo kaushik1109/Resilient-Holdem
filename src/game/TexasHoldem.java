@@ -223,9 +223,8 @@ public class TexasHoldem {
                     int amount = Integer.parseInt(parts[1]);
                     
                     if (payChips(current, amount)) {
-                        int totalBet = current.currentBet; 
-                        if (totalBet > table.currentHighestBet) {
-                            table.currentHighestBet = totalBet;
+                        if (current.currentBet > table.currentHighestBet) {
+                            table.currentHighestBet = current.currentBet;
                             multicastInfo("Player " + current.id + " bets / raises " + amount);
                             actionValid = true;
                         } else if (amount == table.currentHighestBet) {
@@ -325,7 +324,10 @@ public class TexasHoldem {
     private void advancePhase() {
         table.playersActedThisPhase = 0;
         table.currentHighestBet = 0;
-        for (Player p : table.players) p.currentBet = 0;
+        for (Player p : table.players) {
+            p.totalBet += p.currentBet;
+            p.currentBet = 0;
+        }
         
         table.currentPlayerIndex = 0;
         while (table.players.get(table.currentPlayerIndex).folded) {
@@ -418,6 +420,7 @@ public class TexasHoldem {
         
         if (winner != null) {
             winner.chips += table.pot;
+            for (Player p : table.players) p.totalBet = 0;
             summary.append("\n").append("Winner: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot);
             node.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, summary.toString()));
         }
@@ -475,14 +478,11 @@ public class TexasHoldem {
 
         if (winner != null) {
             winner.chips += table.pot;
-
-            node.sequencer.multicastAction(new GameMessage(
-                GameMessage.Type.SHOWDOWN, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot
-            ));
-
-            table.resetDeck();
+            for (Player p : table.players) p.totalBet = 0;
+            node.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot));
         }
 
+        table.resetDeck();
         passLeadership();
     }
 
