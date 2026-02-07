@@ -64,7 +64,7 @@ public class Sequencer {
     public void handleNack(GameMessage nackMsg, String requestorId) {
         try {
             long missingSeq = Long.parseLong(nackMsg.payload);
-            printConsensus("[Sequencer] Node " + requestorId + "requesting retransmission of #" + missingSeq);
+            printConsensus("[Sequencer] Node " + requestorId + " requesting retransmission of #" + missingSeq);
             
             if (historyBuffer.containsKey(missingSeq)) {
                 GameMessage oldMsg = historyBuffer.get(missingSeq);

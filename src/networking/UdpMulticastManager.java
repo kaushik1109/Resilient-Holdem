@@ -23,14 +23,14 @@ public class UdpMulticastManager {
     }
 
     public void start() {
-        new Thread(this::listenForBroadcasts).start();
-        new Thread(this::broadcastJoinRequest).start();
+        new Thread(this::listen).start();
+        new Thread(this::multicastJoinResponse).start();
     }
 
     /**
      * Listens for incoming multicast messages and processes them.
      */
-    private void listenForBroadcasts() {
+    private void listen() {
         try (MulticastSocket socket = new MulticastSocket(MULTICAST_PORT)) {
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
             InetSocketAddress groupAddress = new InetSocketAddress(group, MULTICAST_PORT);
@@ -63,7 +63,7 @@ public class UdpMulticastManager {
     /**
      * Broadcasts a JOIN_REQUEST message to the multicast group.
     */
-    private void broadcastJoinRequest() {
+    private void multicastJoinResponse() {
         try (MulticastSocket socket = new MulticastSocket()) {
             socket.setTimeToLive(NetworkConfig.MULTICAST_TTL);
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);

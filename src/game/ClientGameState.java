@@ -84,6 +84,7 @@ public class ClientGameState {
             "allin - Go all-in with your remaining chips",
             "status - Print current game status",
             "dropnext - Drop the next incoming game message (for testing)",
+            "players - Show current player roster and statuses",
             "help / commands - Show this help message",
             "quit - Leave the game"
         );

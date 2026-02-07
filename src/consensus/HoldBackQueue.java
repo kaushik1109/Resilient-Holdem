@@ -92,6 +92,8 @@ public class HoldBackQueue {
     private void sendNack(long missingSeq) {
         printError("[Queue] Sending NACK for #" + missingSeq);
         tcp.sendNack(leaderId, missingSeq);
+
+        try {Thread.sleep(1000);} catch (InterruptedException e) { }
     }
 
     /**
@@ -115,7 +117,7 @@ public class HoldBackQueue {
                 case COMMUNITY_CARDS: 
                     clientGame.onReceiveCommunity(msg.payload); 
                     break;
-                    
+
                 case GAME_INFO:
                 case SHOWDOWN:
                     clientGame.onReceiveInfo(msg.payload); 

@@ -142,11 +142,12 @@ public class TcpMeshManager {
         Peer peer = peers.get(targetPeerId);
         if (peer == null) {
             connectToPeer(targetPeerId);
-            try { Thread.sleep(200); } catch (Exception e) {}
+            try { Thread.sleep(300); } catch (Exception e) {}
             peer = peers.get(targetPeerId);
         }
 
-        try {       
+        try {
+            printNetworking("[TCP] Sending message of type " + msg.type + " to peer " + targetPeerId);
             synchronized(peer.out) {
                 peer.out.writeObject(msg);
                 peer.out.flush();

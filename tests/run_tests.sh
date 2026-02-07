@@ -8,7 +8,7 @@ JUNIT_JAR="lib/junit-platform-console-standalone.jar"
 
 # -------- sanity checks --------
 if [ ! -f "$JUNIT_JAR" ]; then
-  echo "❌ JUnit jar not found at $JUNIT_JAR"
+  echo "JUnit jar not found at $JUNIT_JAR"
   echo "Download it with:"
   echo "curl -L -o lib/junit-platform-console-standalone.jar \\"
   echo "https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar"
@@ -16,7 +16,7 @@ if [ ! -f "$JUNIT_JAR" ]; then
 fi
 
 if [ ! -d "src" ]; then
-  echo "❌ src/ folder not found — run this from repo root"
+  echo "src/ folder not found — run this from repo root"
   exit 1
 fi
 

@@ -36,7 +36,6 @@ public class ElectionManager {
      */
     public void startStabilizationPeriod() {
         new Thread(() -> {
-            printConsensus("[Election] Listening for authoritative Leader signals.");
             currentLeaderId = null;
 
             while (connectionManager.getConnectedPeerIds().size() < 2) {
@@ -110,7 +109,7 @@ public class ElectionManager {
 
         new Thread(() -> {
             try {
-                Thread.sleep(2000); 
+                Thread.sleep(5000); 
                 if (!electionInProgress) return;
                 printConsensus("[Election] No higher nodes have responded, declaring victory.");
                 declareVictory(false);

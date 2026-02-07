@@ -25,6 +25,11 @@ public class NetworkConfig {
 
     /**
      * Loads network configuration from network.config file or uses default settings.
+     * Defaults:
+     * - MULTICAST_GROUP: 239.255.1.1
+     * - MULTICAST_PORT: 8888
+     * - MULTICAST_TTL: 1
+     * - MY_PORT: Random port between 5000 and 6000
      */
     public static void load() {
         Properties props = new Properties();
