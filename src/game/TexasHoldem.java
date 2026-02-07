@@ -331,9 +331,7 @@ public class TexasHoldem {
             table.currentPlayerIndex = (table.currentPlayerIndex + 1) % table.players.size();
         }
 
-        long canBetCount = table.players.stream()
-            .filter(p -> !p.folded && !p.allIn)
-            .count();
+        long canBetCount = table.players.stream().filter(p -> !p.folded && !p.allIn).count();
             
         boolean skipBetting = (canBetCount < 2);
 
@@ -419,11 +417,11 @@ public class TexasHoldem {
         
         if (winner != null) {
             winner.chips += table.pot;
-            table.resetDeck();
             summary.append("\n").append("Winner: " + winner.name + " with " + winHandDescription + "! Pot: " + table.pot);
             node.sequencer.multicastAction(new GameMessage(GameMessage.Type.SHOWDOWN, summary.toString()));
         }
         
+        table.resetDeck();
         passLeadership();
     }
 
@@ -470,11 +468,12 @@ public class TexasHoldem {
 
         if (winner != null) {
             winner.chips += table.pot;
-            table.resetDeck();
 
             node.sequencer.multicastAction(new GameMessage(
                 GameMessage.Type.SHOWDOWN, "Round Over. Everyone folded. " + winner.name + " wins " + table.pot
             ));
+
+            table.resetDeck();
         }
 
         passLeadership();
