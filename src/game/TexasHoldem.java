@@ -59,6 +59,7 @@ public class TexasHoldem {
         printGame("[Game] I (Node " + node.myId + ") am now Dealer. Leaving the table.");
 
         table.resetDeck();
+        multicastState();
         this.gameInProgress = true;
         node.queue.forceSync(node.sequencer.getCurrentSeqId());
         printNormal("Game State Loaded. Type 'start' to begin next hand");
