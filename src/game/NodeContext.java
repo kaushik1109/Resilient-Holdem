@@ -9,7 +9,7 @@ import networking.GameMessage;
 import networking.NetworkConfig;
 
 import static util.ConsolePrint.printError;
-import static util.ConsolePrint.printGame;
+import static util.ConsolePrint.togglePrintSuppress;
 
 /**
  * Represents the context of a node in the Resilient Hold'em game.
@@ -78,12 +78,6 @@ public class NodeContext {
                 election.handleMessage(msg);
                 break;
 
-            case HANDOVER:
-                printGame("[Context] Leadership passed to me");
-                PokerTable loadedTable = PokerTable.deserializeState(msg.payload);
-                election.declareVictory(true);
-                createServerGame(loadedTable);
-
             case COORDINATOR:
                 election.currentLeaderId = msg.getSenderId();
                 queue.setLeaderId(msg.getSenderId());
@@ -94,6 +88,8 @@ public class NodeContext {
             case GAME_INFO:
             case COMMUNITY_CARDS:
             case SHOWDOWN:
+                if (!msg.getSenderId().equals(election.currentLeaderId)) break;
+
                 if (dropNext) {
                     printError("[Context] Simulating omission. Dropped Msg #" + msg.sequenceNumber);
                     dropNext = false;
@@ -110,14 +106,17 @@ public class NodeContext {
                 break;
 
             case GAME_STATE:
+                if (!msg.getSenderId().equals(election.currentLeaderId)) break;
                 queue.addMessage(msg);
                 break;
 
             case SYNC:
+                if (!msg.getSenderId().equals(election.currentLeaderId)) break;
                 queue.forceSync(Long.parseLong(msg.payload));
                 break;
 
             case YOUR_HAND:
+                if (!msg.getSenderId().equals(election.currentLeaderId)) break;
                 clientGame.onReceiveHand(msg.payload);
                 break;
             
@@ -205,4 +204,20 @@ public class NodeContext {
      * This method is called when the node is no longer the leader before handover or wants to reset the game state.
      */
     public void destroyServerGame() { this.serverGame = null; }
+
+    public void resetAll(boolean possibleCrash) {
+        synchronized(this) {
+            if (possibleCrash && serverGame == null) return;
+            togglePrintSuppress();
+            destroyServerGame();
+            for (String p : tcp.getConnectedPeerIds()) {
+                tcp.closeConnection(p);
+                clientGame.table.removePlayer(p);
+            }
+            election.passLeadership();
+            queue.forceSync(0);
+            udp.multicastJoinResponse();
+            togglePrintSuppress();
+        }
+    }
 }

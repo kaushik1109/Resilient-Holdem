@@ -189,6 +189,10 @@ public class ClientGameState {
                         case "players":
                             node.clientGame.printPlayerRoster(node.getServerGame() != null ? node.getServerGame().table : node.clientGame.table);
                             break;
+
+                        case "reset":
+                            node.resetAll(false);
+                            break;
                         
                         case "help":
                         case "commands":
