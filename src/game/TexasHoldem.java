@@ -60,7 +60,6 @@ public class TexasHoldem {
 
         table.resetDeck();
         multicastState();
-        this.gameInProgress = true;
         node.queue.forceSync(node.sequencer.getCurrentSeqId());
         printNormal("Game State Loaded. Type 'start' to begin next hand");
     }
@@ -100,7 +99,7 @@ public class TexasHoldem {
         List<Player> activePlayers = table.players.stream().filter(p -> p.isActive).toList();
         
         if (activePlayers.size() < 2) {
-            printGame("[Game] Cannot start. Need at least 2 players (excluding Dealer). Current: " + table.players.size());
+            printGame("[Game] Cannot start. Need at least 2 active players (excluding Dealer). Current: " + activePlayers.size());
             return;
         }
         
