@@ -4,6 +4,7 @@ import java.util.*;
 import networking.GameMessage;
 import networking.NetworkConfig;
 
+import static util.ConsolePrint.printNormal;
 import static util.ConsolePrint.printError;
 import static util.ConsolePrint.printBold;
 
@@ -21,13 +22,13 @@ public class ClientGameState {
     public void onReceiveHand(String payload) {
         myHand.clear();
         Collections.addAll(myHand, payload.split(","));
-        System.out.println("My Hand: " + myHand);
+        printNormal("My Hand: " + myHand);
     }
     
     public void onReceiveCommunity(String payload) {
         communityCards.clear();
         Collections.addAll(communityCards, payload.split(","));
-        System.out.println("Board: " + communityCards);
+        printNormal("Board: " + communityCards);
     }
 
     public void onReceiveState(String payload) {
@@ -42,21 +43,24 @@ public class ClientGameState {
     
     public void onReceiveInfo(String msg) {
         this.status = msg;
-        System.out.println(msg);
+        printNormal(msg);
     }
     
     public void printStatus(String nodeId, String leaderId) {
-        System.out.println("STATUS");
-        System.out.println("My ID: " + nodeId);
-        System.out.println("Leader: " + leaderId);
+        printBold("\nGame Status");
+        printNormal("My ID: " + nodeId);
+        printNormal("Leader: " + leaderId);
+
         if (myHand.isEmpty()) {
-             System.out.println("My Hand: [Spectating / Folded]");
+            printNormal("My Hand: [Spectating / Folded]");
         } else {
-             System.out.println("My Hand: " + myHand);
+            printNormal("My Hand: " + myHand);
+            printChips();
         }
         
-        System.out.println("Board: " + communityCards);
-        System.out.println("Status: " + status);
+        printNormal("Board: " + communityCards);
+        printNormal("Status: " + status);
+        printPlayerRoster(table);
     }
 
     private void printPlayerRoster(PokerTable table) {
@@ -65,11 +69,19 @@ public class ClientGameState {
             return;
         }
 
+        if (table.players.size() < 1) {
+            printNormal("Player list currently unavailable");
+            return;
+        }
+
         printBold("Current Players:");
         for (Player player : table.players) {
-            System.out.printf("%s: Chips=%d, Bet=%d, Folded=%b\n",
-                player.name, player.chips, player.currentBet, player.folded);
+            printNormal(player.name + ": Chips = " + player.chips + ", Bet = " + player.currentBet + ", Folded = " + player.folded);
         }
+    }
+
+    private void printChips() {
+        printNormal("My Chips: " + myChips);
     }
 
     public static void printHelp() {
@@ -89,7 +101,7 @@ public class ClientGameState {
             "quit - Leave the game"
         );
         printBold("\nAvailable Commands:");
-        commands.forEach(cmd -> System.out.println("  " + cmd));
+        commands.forEach(cmd -> printNormal(cmd));
     }
 
     /**
@@ -157,7 +169,7 @@ public class ClientGameState {
                             break;
 
                         case "chips":
-                            System.out.println("My Chips: " + node.clientGame.myChips);
+                            node.clientGame.printChips();
                             break;
 
                         case "status":

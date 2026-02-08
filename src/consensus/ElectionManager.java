@@ -146,7 +146,7 @@ public class ElectionManager {
             default: break;
         }
     }
-    
+
     /**
      * Handles the failure of a node by checking if it was the leader and initiating a new election if necessary.
      * @param deadNodeId The ID of the node that has failed.
