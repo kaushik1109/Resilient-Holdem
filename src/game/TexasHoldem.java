@@ -507,6 +507,8 @@ public class TexasHoldem {
         printGame("[Game] Rotating dealer.");
         new Thread(() -> {
             try { Thread.sleep(2000); } catch (Exception e) {}
+            // this one line can handle a leader coming back from a hang
+            if (table.players.size() < 2) {node.resetAll(true); return;}
             node.election.passLeadership(); 
             node.destroyServerGame();
         }).start();
