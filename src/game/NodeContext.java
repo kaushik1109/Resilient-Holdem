@@ -208,13 +208,18 @@ public class NodeContext {
     public void resetAll(boolean possibleCrash) {
         synchronized(this) {
             if (possibleCrash && serverGame == null) return;
+
             togglePrintSuppress();
-            destroyServerGame();
             for (String p : tcp.getConnectedPeerIds()) {
                 tcp.closeConnection(p);
                 clientGame.table.removePlayer(p);
             }
-            election.passLeadership();
+
+            if (election.iAmLeader) {
+                election.passLeadership();
+                destroyServerGame();
+            }
+            
             queue.forceSync(0);
             udp.multicastJoinResponse();
             togglePrintSuppress();
