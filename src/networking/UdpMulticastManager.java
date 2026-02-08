@@ -61,9 +61,9 @@ public class UdpMulticastManager {
     }
 
     /**
-     * Broadcasts a JOIN_REQUEST message to the multicast group.
+     * Multicasts a JOIN_REQUEST message to the multicast group.
     */
-    private void multicastJoinResponse() {
+    public void multicastJoinResponse() {
         try (MulticastSocket socket = new MulticastSocket()) {
             socket.setTimeToLive(NetworkConfig.MULTICAST_TTL);
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
@@ -76,7 +76,7 @@ public class UdpMulticastManager {
 
             DatagramPacket packet = new DatagramPacket(data, data.length, group, MULTICAST_PORT);
             socket.send(packet);
-            printNetworking("[UDP] Broadcasted JOIN_REQUEST.");
+            printNetworking("[UDP] Multicasted JOIN_REQUEST.");
         } catch (Exception e) {
             printError("[UDP] " + e.getMessage());
             e.printStackTrace();

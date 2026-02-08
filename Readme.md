@@ -1,10 +1,11 @@
-# Resilient-Holdem 
+# Resilient-Holdem
 
 ## Architecture Overview
-This is a distributed Texas Hold'em poker game implementing total order broadcast for game state consistency. Key components:
+
+This is a distributed Texas Hold'em poker game implementing total order multicast for game state consistency. Key components:
 
 - **NodeContext**: Central hub coordinating all subsystems (networking, consensus, game state)
-- **Networking**: TCP mesh for peer-to-peer communication, UDP multicast for sequenced broadcasts
+- **Networking**: TCP mesh for peer-to-peer communication, UDP multicast for game state updates
 - **Consensus**: Leader election (ElectionManager), total ordering (Sequencer + HoldBackQueue)
 - **Game Logic**: TexasHoldem server game, ClientGameState for local views
 
@@ -20,9 +21,12 @@ Messages are routed through `NodeContext.routeMessage()` based on `GameMessage.T
   ```bash
   chmod +x start.sh
   ./start.sh
+  ```
+
 ---
 
 ## Key Patterns
+
 - **Message Routing**: All inter-node communication via GameMessage enum types, handled in `NodeContext.routeMessage()`
 - **Consensus Flow**: Client actions → ACTION_REQUEST → Sequencer assigns seq ID → UDP multicast → HoldBackQueue delivers in order
 - **Leader Election**: Bully algorithm variant; leader creates/manages TexasHoldem server instance
@@ -31,6 +35,7 @@ Messages are routed through `NodeContext.routeMessage()` based on `GameMessage.T
 ---
 
 ## File Organization
+
 - `src/Main.java`: Entry point, creates NodeContext, starts election, handles user input
 - `src/game/NodeContext.java`: Core integration point, routes messages to appropriate handlers
 - `src/consensus/`: ElectionManager, Sequencer, HoldBackQueue implement distributed algorithms
@@ -41,6 +46,7 @@ Messages are routed through `NodeContext.routeMessage()` based on `GameMessage.T
 ---
 
 ## Conventions
+
 - Pure Java, no external dependencies
 - AtomicLong for sequence IDs, ConcurrentHashMap for thread-safe collections
 - Heartbeat-based failure detection (2s intervals, 6s timeout)
@@ -49,8 +55,9 @@ Messages are routed through `NodeContext.routeMessage()` based on `GameMessage.T
 ---
 
 ## Common Tasks
+
 - Adding game actions: Extend `GameMessage.Type`, add routing in `NodeContext.routeMessage()`, implement in TexasHoldem
-- Network changes: Update TcpMeshManager for connection logic, UdpMulticastManager for broadcast patterns
+- Network changes: Update TcpMeshManager for connection logic, UdpMulticastManager for multicast patterns
 - Consensus modifications: Modify Sequencer for ordering, HoldBackQueue for delivery guarantees
 
 ---
@@ -96,3 +103,4 @@ Make the script executable:
 
 ```bash
 chmod +x run_tests.sh
+```

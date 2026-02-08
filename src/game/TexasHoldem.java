@@ -94,7 +94,7 @@ public class TexasHoldem {
     /**
      * Starts a new round of Texas Hold'em if there are enough players.
      * Resets the deck, deals hole cards to each player, and notifies them of their hand.
-     * Broadcasts the new round state to all players and prompts the first player to act.
+     * Multicasts the new round state to all players and prompts the first player to act.
      */
     public void startNewRound() {
         List<Player> activePlayers = table.players.stream().filter(p -> p.isActive).toList();
@@ -374,7 +374,7 @@ public class TexasHoldem {
     }
 
     /**
-     * Deals a specified number of community cards and broadcasts them to all players.
+     * Deals a specified number of community cards and multicasts them to all players.
      * @param count The number of community cards to deal.
      */
     private void dealCommunity(int count) {
@@ -390,7 +390,7 @@ public class TexasHoldem {
 
     /**
      * Performs the showdown phase, evaluating all active players' hands and determining the winner.
-     * Broadcasts the results to all players and awards the pot to the winner.
+     * Multicasts the results to all players and awards the pot to the winner.
      * Rotates the dealer and passes leadership to the next node.
      */
     private void performShowdown() {
@@ -507,7 +507,7 @@ public class TexasHoldem {
         printGame("[Game] Rotating dealer.");
         new Thread(() -> {
             try { Thread.sleep(2000); } catch (Exception e) {}
-            node.election.passLeadership(PokerTable.getSerializedState(table)); 
+            node.election.passLeadership(); 
             node.destroyServerGame();
         }).start();
         

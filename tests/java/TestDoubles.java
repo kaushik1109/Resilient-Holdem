@@ -48,7 +48,7 @@ public final class TestDoubles {
   public static class DummyTcp extends TcpMeshManager {
     public Set<String> peers;
     public List<Sent> sentToPeer;
-    public List<GameMessage> broadcasts;
+    public List<GameMessage> multicasts;
     public List<Nack> nacks;
     public List<String> closed;
 
@@ -70,7 +70,7 @@ public final class TestDoubles {
     public DummyTcp init() {
       this.peers = new LinkedHashSet<>();
       this.sentToPeer = new CopyOnWriteArrayList<>();
-      this.broadcasts = new CopyOnWriteArrayList<>();
+      this.multicasts = new CopyOnWriteArrayList<>();
       this.nacks = new CopyOnWriteArrayList<>();
       this.closed = new CopyOnWriteArrayList<>();
       return this;
@@ -87,8 +87,8 @@ public final class TestDoubles {
     }
 
     @Override
-    public void broadcastToAll(GameMessage msg) {
-      broadcasts.add(msg);
+    public void multicastToAll(GameMessage msg) {
+      multicasts.add(msg);
     }
 
     @Override

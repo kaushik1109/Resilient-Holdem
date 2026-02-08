@@ -167,10 +167,10 @@ public class TcpMeshManager {
     }
 
     /**
-     * Broadcasts a GameMessage to all connected peers.
-     * @param msg The GameMessage to be broadcasted.
+     * Multicasts a GameMessage to all connected peers.
+     * @param msg The GameMessage to be multicasted.
      */
-    public void broadcastToAll(GameMessage msg) {
+    public void multicastToAll(GameMessage msg) {
         peers.values().forEach(p -> sendToPeer(p.peerId, msg));
     }
 
@@ -193,7 +193,7 @@ public class TcpMeshManager {
             try {
                 Thread.sleep(HEARTBEAT_INTERVAL);
                 GameMessage hb = new GameMessage(GameMessage.Type.HEARTBEAT);
-                broadcastToAll(hb);
+                multicastToAll(hb);
             } catch (InterruptedException e) {}
         }
     }

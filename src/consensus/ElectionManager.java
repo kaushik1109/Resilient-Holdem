@@ -50,12 +50,11 @@ public class ElectionManager {
 
     /**
      * Passes leadership to the next node in the sorted list of connected nodes.
-     * @param serializedTablePayload The serialized game state to send to the new leader.
      */
-    public void passLeadership(String serializedTablePayload) {
+    public void passLeadership() {
         iAmLeader = false;
         printElection("[Election] Giving up leadership");
-        startElection("New Round");;
+        startElection("New Round");
     }
 
     /**
@@ -64,6 +63,7 @@ public class ElectionManager {
      */
     public synchronized void startElection(String reason) {
         if (iAmLeader || electionInProgress) return;
+        if (connectionManager.getConnectedPeerIds().size() < 1) return;
         
         electionInProgress = true;
         boolean sentChallenge = false;
@@ -99,7 +99,7 @@ public class ElectionManager {
     }
 
     /**
-     * Declares this node as the new leader and broadcasts the COORDINATOR message.
+     * Declares this node as the new leader and multicasts the COORDINATOR message.
      * @param handover Indicates if this declaration is part of a leadership handover.
      */
     public synchronized void declareVictory(boolean handover) {
@@ -109,7 +109,7 @@ public class ElectionManager {
         iAmLeader = true;
         currentLeaderId = node.myId;
         electionInProgress = false;
-        connectionManager.broadcastToAll(new GameMessage(GameMessage.Type.COORDINATOR));
+        connectionManager.multicastToAll(new GameMessage(GameMessage.Type.COORDINATOR));
 
         if(!handover) node.createServerGame(node.clientGame.table);
     }
@@ -140,7 +140,7 @@ public class ElectionManager {
                 currentLeaderId = msg.getSenderId();
                 iAmLeader = currentLeaderId.equals(node.myId);
                 electionInProgress = false;
-                printElection("[Election] New leader: " + msg.getSenderId());
+                printElectionBold("[Election] Leader: " + msg.getSenderId());
                 break;
                 
             default: break;
