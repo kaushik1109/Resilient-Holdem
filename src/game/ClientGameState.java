@@ -74,7 +74,7 @@ public class ClientGameState {
             return;
         }
 
-        printBold("Current Players:");
+        printBold("\nCurrent Players:");
         for (Player player : table.players) {
             printNormal(player.name + ": Chips = " + player.chips + ", Bet = " + player.currentBet + ", Folded = " + player.folded);
         }

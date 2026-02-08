@@ -33,6 +33,7 @@ public class TexasHoldem {
     public TexasHoldem(NodeContext node, PokerTable loadedTable) {
         this.node = node;
         this.table = loadedTable;
+        this.table.resetDeck();
         node.sequencer.resetSeqId();
 
         printGame("[Game] Reconciling player roster");
@@ -58,7 +59,6 @@ public class TexasHoldem {
 
         printGame("[Game] I (Node " + node.myId + ") am now Dealer. Leaving the table.");
 
-        table.resetDeck();
         multicastState();
         node.queue.forceSync(node.sequencer.getCurrentSeqId());
         printNormal("Game State Loaded. Type 'start' to begin next hand");
@@ -74,6 +74,7 @@ public class TexasHoldem {
         if (playerId.equals(node.myId)) return;
         
         sendPrivateMessage(GameMessage.Type.SYNC, playerId, String.valueOf(node.sequencer.getCurrentSeqId()));
+        multicastState();
         
         if (table.players.stream().anyMatch(p -> p.id.equals(playerId))) return;
 
