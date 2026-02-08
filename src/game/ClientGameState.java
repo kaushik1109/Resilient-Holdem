@@ -60,10 +60,10 @@ public class ClientGameState {
         
         printNormal("Board: " + communityCards);
         printNormal("Status: " + status);
-        printPlayerRoster(table);
+        printPlayerRoster(table, leaderId);
     }
 
-    private void printPlayerRoster(PokerTable table) {
+    private void printPlayerRoster(PokerTable table, String leaderId) {
         if (table == null) {
             printError("No game in progress.");
             return;
@@ -76,7 +76,8 @@ public class ClientGameState {
 
         printBold("\nCurrent Players:");
         for (Player player : table.players) {
-            printNormal(player.name + ": Chips = " + player.chips + ", Bet = " + player.currentBet + ", Folded = " + player.folded);
+            if (player.id.equals(leaderId)) printNormal(player.name + " (Dealer): Chips = " + player.chips);
+            else printNormal(player.name + ": Chips = " + player.chips + ", Bet = " + player.currentBet + ", Folded = " + player.folded);
         }
     }
 
@@ -187,7 +188,7 @@ public class ClientGameState {
                             break;
 
                         case "players":
-                            node.clientGame.printPlayerRoster(node.getServerGame() != null ? node.getServerGame().table : node.clientGame.table);
+                            node.clientGame.printPlayerRoster(node.getServerGame() != null ? node.getServerGame().table : node.clientGame.table, node.election.currentLeaderId);
                             break;
 
                         case "reset":

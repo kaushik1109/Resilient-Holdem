@@ -7,15 +7,24 @@ import static util.ConsolePrint.printGame;
 import static util.ConsolePrint.printNormal;
 
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Implements the Texas Hold'em poker game logic, managing player actions, game phases, and state transitions.
  */
 public class TexasHoldem {
+    private static final int TURN_TIMEOUT_SECONDS = 600; 
+
     private final NodeContext node;
     public final PokerTable table; 
 
+    private ScheduledExecutorService turnTimer = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> currentTimerTask;
     private boolean gameInProgress = false;
+    private int currentTurnToken = 0;
     
     public enum Phase { PREFLOP, FLOP, TURN, RIVER, SHOWDOWN }
 
@@ -152,6 +161,7 @@ public class TexasHoldem {
         Player next = table.players.get(table.currentPlayerIndex);
         multicastInfo("Pot: " + table.pot + " | Turn: Player " + next.id + " (To Call: " + (table.currentHighestBet - next.currentBet) + ")");
         try { Thread.sleep(500); } catch (Exception e) {}
+        startTurnTimer(table.currentPlayerIndex);
         sendPrivateState(next.id, "It is your turn!");
     }
 
@@ -257,6 +267,7 @@ public class TexasHoldem {
         }
 
         if (actionValid) {
+            stopTurnTimer();
             moveToNextPlayer();
         }
     }
@@ -523,6 +534,23 @@ public class TexasHoldem {
         printGame("[Game] Sending updated table state to all players.");
         String stateData = PokerTable.getSerializedState(table);
         node.sequencer.multicastAction(new GameMessage(GameMessage.Type.GAME_STATE, stateData));
+    }
+
+    public void startTurnTimer(int playerIndex) {
+        stopTurnTimer();
+        currentTimerTask = turnTimer.schedule(() -> handleTimeout(currentTurnToken++, playerIndex), TURN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    public void stopTurnTimer() {
+        if (currentTimerTask != null && !currentTimerTask.isDone()) {
+            currentTimerTask.cancel(false);
+        }
+    }
+
+    private synchronized void handleTimeout(int token, int playerIndex) {
+        if (token != currentTurnToken) return;
+        printError("[System] Player " + playerIndex + " timed out (Auto-Fold).");
+        processAction("fold");
     }
 
     private boolean isPlayerInactive(Player p) {
