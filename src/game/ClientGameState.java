@@ -139,6 +139,8 @@ public class ClientGameState {
                             if (parts.length < 2 || !parts[1].matches("\\d+")) {
                                 printError( "Enter a number to bet / raise / pay. eg. bet 200");
                                 break;
+                            } if ("pay".equals(cmd) && parts[1].length() > 6) {
+                                printError("This casino cannot afford such a high bet. Please enter a reasonable amount of chips to add");
                             }
                             
                             actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, cmd + " " + parts[1]);
@@ -201,7 +203,7 @@ public class ClientGameState {
                             break;
 
                         default:
-                            printError( "Unknown command.");
+                            printError( "Unknown command: " + cmd);
                     }
                 } catch (Exception e) {
                     printError( "Error processing command: " + e.getMessage());

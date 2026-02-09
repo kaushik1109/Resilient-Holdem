@@ -4,6 +4,10 @@ import networking.GameMessage;
 import networking.TcpMeshManager;
 import game.ClientGameState;
 import java.util.PriorityQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.Comparator;
 import java.util.function.Consumer;
 
@@ -15,6 +19,10 @@ import static util.ConsolePrint.printConsensus;
  * Buffers out-of-order messages and requests retransmission of missing messages via NACKs.
  */
 public class HoldBackQueue {
+    private final ScheduledExecutorService nackScheduler = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> nackTimer;
+    private static final int NACK_DELAY_MS = 1000;
+
     private PriorityQueue<GameMessage> queue = new PriorityQueue<>(
         Comparator.comparingLong(msg -> msg.sequenceNumber)
     );
@@ -68,19 +76,23 @@ public class HoldBackQueue {
                 printConsensus("[Queue] Processing #" + head.sequenceNumber + ", expecting #" + nextExpectedSeq);
 
                 if (head.sequenceNumber == nextExpectedSeq) {
+                    if (nackTimer != null && !nackTimer.isDone()) {
+                        nackTimer.cancel(false);
+                        nackTimer = null;
+                        printConsensus("[Recovered] Packet #" + nextExpectedSeq + " arrived naturally. NACK cancelled.");
+                    }
+
                     queue.poll();
-                    
-                    // Update sequence BEFORE delivering to app. This ensures if the app generates a NEW message (Seq+1), we are ready for it.
                     nextExpectedSeq++; 
-                    
                     deliverToApp(head);
                 } 
                 else if (head.sequenceNumber < nextExpectedSeq) {
-                    // Ignore duplicate
                     queue.poll();
                 } 
                 else {
-                    sendNack(nextExpectedSeq);
+                    if (nackTimer == null || nackTimer.isDone()) {
+                        scheduleNack(nextExpectedSeq);
+                    }
                     break;
                 }
             }
@@ -88,12 +100,17 @@ public class HoldBackQueue {
             isProcessing = false;
         }
     }
-    
-    private void sendNack(long missingSeq) {
-        printError("[Queue] Sending NACK for #" + missingSeq);
-        tcp.sendNack(leaderId, missingSeq);
 
-        try {Thread.sleep(1000);} catch (InterruptedException e) { }
+    private void scheduleNack(long missingSeq) {
+        printError("[Queue] Missing #" + missingSeq + ". Scheduling NACK in " + NACK_DELAY_MS + "ms");
+        
+        nackTimer = nackScheduler.schedule(() -> {
+            printError("[Timeout] Gap #" + missingSeq + " persisted. Sending NACK now.");
+            if (tcp != null && leaderId != null) {
+                tcp.sendNack(leaderId, missingSeq);
+            }
+            nackTimer = null;
+        }, NACK_DELAY_MS, TimeUnit.MILLISECONDS);
     }
 
     /**
