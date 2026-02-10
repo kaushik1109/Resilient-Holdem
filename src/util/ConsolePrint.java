@@ -47,6 +47,11 @@ public class ConsolePrint {
         System.out.println(ConsoleColors.GREEN + message + ConsoleColors.RESET);
     }
 
+    public static void printGameBold(String message) {
+        if (suppress) return;
+        System.out.println(ConsoleColors.GREEN_BOLD + message + ConsoleColors.RESET);
+    }
+
     public static void togglePrintSuppress() {
         suppress = !suppress;
     }

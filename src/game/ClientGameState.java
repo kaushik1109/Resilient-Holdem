@@ -6,6 +6,7 @@ import networking.NetworkConfig;
 
 import static util.ConsolePrint.printNormal;
 import static util.ConsolePrint.printError;
+import static util.ConsolePrint.printGameBold;
 import static util.ConsolePrint.printBold;
 
 /**
@@ -43,6 +44,9 @@ public class ClientGameState {
     
     public void onReceiveInfo(String msg) {
         this.status = msg;
+
+        if (msg.startsWith("It is your turn!")) printGameBold(msg);
+
         printNormal(msg);
     }
     
