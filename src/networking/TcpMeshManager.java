@@ -194,6 +194,7 @@ public class TcpMeshManager {
         while (running) {
             try {
                 Thread.sleep(HEARTBEAT_INTERVAL);
+                if (peers.isEmpty()) node.udp.multicastJoinRequest();
                 GameMessage hb = new GameMessage(GameMessage.Type.HEARTBEAT);
                 multicastToAll(hb);
             } catch (InterruptedException e) {}

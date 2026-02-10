@@ -221,7 +221,7 @@ public class NodeContext {
             }
             
             queue.forceSync(0);
-            udp.multicastJoinResponse();
+            udp.multicastJoinRequest();
             togglePrintSuppress();
         }
     }

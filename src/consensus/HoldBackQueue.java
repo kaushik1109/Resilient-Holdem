@@ -21,7 +21,7 @@ import static util.ConsolePrint.printConsensus;
 public class HoldBackQueue {
     private final ScheduledExecutorService nackScheduler = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> nackTimer;
-    private static final int NACK_DELAY_MS = 1000;
+    private static final int NACK_DELAY_MS = 500;
 
     private PriorityQueue<GameMessage> queue = new PriorityQueue<>(
         Comparator.comparingLong(msg -> msg.sequenceNumber)

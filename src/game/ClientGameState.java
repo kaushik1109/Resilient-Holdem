@@ -141,6 +141,7 @@ public class ClientGameState {
                                 break;
                             } if ("pay".equals(cmd) && parts[1].length() > 6) {
                                 printError("This casino cannot afford such a high bet. Please enter a reasonable amount of chips to add");
+                                break;
                             }
                             
                             actionMsg = new GameMessage(GameMessage.Type.ACTION_REQUEST, cmd + " " + parts[1]);

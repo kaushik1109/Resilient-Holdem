@@ -24,7 +24,7 @@ public class UdpMulticastManager {
 
     public void start() {
         new Thread(this::listen).start();
-        new Thread(this::multicastJoinResponse).start();
+        new Thread(this::multicastJoinRequest).start();
     }
 
     /**
@@ -56,14 +56,14 @@ public class UdpMulticastManager {
             }
         } catch (Exception e) {
             printError("[UDP] " + e.getMessage());
-            e.printStackTrace(); 
+            //e.printStackTrace(); 
         }
     }
 
     /**
      * Multicasts a JOIN_REQUEST message to the multicast group.
     */
-    public void multicastJoinResponse() {
+    public void multicastJoinRequest() {
         try (MulticastSocket socket = new MulticastSocket()) {
             socket.setTimeToLive(NetworkConfig.MULTICAST_TTL);
             InetAddress group = InetAddress.getByName(MULTICAST_GROUP);
@@ -103,7 +103,7 @@ public class UdpMulticastManager {
             printNetworking("[UDP] Sent Multicast: " + msg.type + " (Seq: " + msg.sequenceNumber + ")");
         } catch (Exception e) {
             printError("[UDP] " + e.getMessage());
-            e.printStackTrace();
+            //e.printStackTrace();
         }
     }
 }
