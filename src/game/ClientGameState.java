@@ -45,7 +45,7 @@ public class ClientGameState {
     public void onReceiveInfo(String msg) {
         this.status = msg;
 
-        if (msg.startsWith("It is your turn!")) printGameBold(msg);
+        if (msg.startsWith("It is your turn!")) {printGameBold(msg); return;}
 
         printNormal(msg);
     }
